@@ -1,4 +1,3 @@
-using MongoDB.Driver;
 using MainHub.Api.DTOs.ServiceHistory;
 using MainHub.Api.DTOs;
 using MainHub.Api.Repositories;
@@ -67,11 +66,11 @@ public interface IServiceHistoryService
 
 public class ServiceHistoryService(
   IServiceHistoryRepository repository,
-  IUserService userService
+  IVehicleRepository vehicleRepository
 ) : IServiceHistoryService
 {
   private readonly IServiceHistoryRepository _repository = repository;
-  private readonly IUserService _userService = userService;
+  private readonly IVehicleRepository _vehicleRepository = vehicleRepository;
 
   public async Task DeleteAllByVehicleIdAsync(Guid vehicleId, Guid userId)
   {
@@ -203,21 +202,7 @@ public class ServiceHistoryService(
 
   private async Task EnsureValidVehicleRequest(Guid userId, Guid vehicleId)
   {
-    var user = await _userService.GetByIdAsync(userId);
-
-    if (user == null)
-    {
-      throw new ArgumentException("User not found.", nameof(userId));
-    }
-
-    if (user.VehicleIds == null || user.VehicleIds.Count == 0)
-    {
-      throw new ArgumentException("Vehicles not found for the specified user.", nameof(userId));
-    }
-
-    var isVehicleBelongsToUser = user.VehicleIds.Contains(vehicleId);
-
-    if (!isVehicleBelongsToUser)
+    if (!await _vehicleRepository.BelongsToUserAsync(vehicleId, userId))
     {
       throw new ArgumentException("The specified vehicle does not found.", nameof(vehicleId));
     }

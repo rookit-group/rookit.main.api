@@ -1,6 +1,24 @@
 name: caramob
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mainhub
+      POSTGRES_USER: mainhub
+      POSTGRES_PASSWORD: mainhub
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mainhub -d mainhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   mainhub-api:
     build:
       context: .
@@ -9,13 +27,12 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5001
-      - MongoDbSettings__ConnectionString=mongodb://admin:admin123@localhost:27017
-      - MongoDbSettings__DatabaseName=Main
-      - MongoDbSettings__UserCollectionName=Users
-      - MongoDbSettings__VehicleCollectionName=Vehicles
-      - MongoDbSettings__ServiceHistoryCollectionName=ServiceHistories
+      - ConnectionStrings__Main=Host=postgres;Port=5432;Database=mainhub;Username=mainhub;Password=mainhub
     ports:
       - "5001:5001"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   ngrok:
     image: ngrok/ngrok:latest
@@ -27,3 +44,6 @@ services:
       - "4040:4040"
     depends_on:
       - mainhub-api
+
+volumes:
+  postgres_data:

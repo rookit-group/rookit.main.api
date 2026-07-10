@@ -1,8 +1,4 @@
 using Microsoft.OpenApi.Models;
-using MongoDB.Bson;
-using MongoDB.Bson.Serialization;
-using MongoDB.Bson.Serialization.Serializers;
-using MongoDB.Driver;
 using MainHub.Api.Config;
 using MainHub.Api.Repositories;
 using MainHub.Api.Services;
@@ -16,17 +12,9 @@ using Arex388.NhtsaVpic.Extensions.Microsoft.DependencyInjection;
 using MainHub.Api.DTOs;
 using AspNetCore.Swagger.Themes;
 using Microsoft.AspNetCore.Authorization;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// 🟦 Configure MongoDB Guid representation globally
-// Register a serializer for Guid to serialize as strings (matching the entity Id representation)
-BsonSerializer.RegisterSerializer(new GuidSerializer(BsonType.String));
-
-// 🟦 Load MongoDB settings from configuration file
-builder.Services.Configure<MongoDbSettings>(
-    builder.Configuration.GetSection("MongoDbSettings")
-);
 
 // 🟦 Load JWT settings from configuration file
 builder.Services.Configure<JwtSettings>(
@@ -44,16 +32,13 @@ builder.Services.Configure<TelegramSettings>(
     builder.Configuration.GetSection("TelegramSettings")
 );
 
-// 🟦 Register MongoDB client as a singleton
-builder.Services.AddSingleton<IMongoClient>(sp =>
+// 🟦 Register PostgreSQL data source as a singleton (built-in connection pooling)
+var connectionString = builder.Configuration.GetConnectionString("Main");
+if (string.IsNullOrEmpty(connectionString))
 {
-    var settings = builder.Configuration.GetSection("MongoDbSettings").Get<MongoDbSettings>();
-    if (settings == null || string.IsNullOrEmpty(settings.ConnectionString))
-    {
-        throw new InvalidOperationException("MongoDbSettings or ConnectionString is not configured properly.");
-    }
-    return new MongoClient(settings.ConnectionString);
-});
+    throw new InvalidOperationException("ConnectionStrings:Main is not configured properly.");
+}
+builder.Services.AddSingleton(new NpgsqlDataSourceBuilder(connectionString).Build());
 
 // 🟦 Register application services 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
