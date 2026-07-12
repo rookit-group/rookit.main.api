@@ -1,6 +1,7 @@
 using MainHub.Api.DTOs;
 using MainHub.Api.DTOs.ServiceHistory;
 using MainHub.Api.Services;
+using MainHub.Api.Enums;
 
 namespace MainHub.Api.Endpoints;
 
@@ -11,7 +12,7 @@ public static partial class AdminServiceHistoryEndpoints
     var admin = app
       .MapGroup("/api/admin")
       .WithTags("Admin")
-      .RequireAuthorization("RequireAdminJwt");
+      .RequireAuthorization(nameof(AuthPolicy.RequireAdminJwt));
 
     admin
       .MapGet("/vehicles/{vehicleId}/service-history", GetAdminVehicleHistoryAsync)

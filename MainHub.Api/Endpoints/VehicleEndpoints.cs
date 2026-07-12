@@ -1,5 +1,6 @@
 using Arex388.NhtsaVpic;
 using MainHub.Api.DTOs;
+using MainHub.Api.Enums;
 using MainHub.Api.Filters;
 using MainHub.Api.Services;
 using System.Security.Claims;
@@ -14,7 +15,7 @@ public static partial class VehicleEndpoints
     var vehicles = app
       .MapGroup("/api/vehicles")
       .WithTags("Vehicles")
-      .RequireAuthorization("RequireInternalJwt"); // Only Internal JWT tokens allowed
+      .RequireAuthorization(nameof(AuthPolicy.RequireMobileJwt));
 
     var _contentType = "application/json";
 

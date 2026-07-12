@@ -1,6 +1,7 @@
 using MainHub.Api.DTOs;
 using MainHub.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using MainHub.Api.Enums;
 
 namespace MainHub.Api.Endpoints;
 
@@ -11,7 +12,7 @@ public static class AdminUserEndpoints
     var users = app
       .MapGroup("/api/admin/user")
       .WithTags("Admin")
-      .RequireAuthorization("RequireAdminJwt");
+      .RequireAuthorization(nameof(AuthPolicy.RequireAdminJwt));
 
     users.MapGet("", GetAllUsersAsync)
       .WithSummary("Get paged list of all users")

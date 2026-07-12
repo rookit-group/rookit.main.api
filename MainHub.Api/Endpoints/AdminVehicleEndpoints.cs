@@ -1,6 +1,7 @@
 using MainHub.Api.DTOs;
 using MainHub.Api.Services;
 using Microsoft.AspNetCore.Mvc;
+using MainHub.Api.Enums;
 
 namespace MainHub.Api.Endpoints;
 
@@ -11,7 +12,7 @@ public static partial class AdminVehicleEndpoints
     var vehicles = app
       .MapGroup("/api/admin/vehicles")
       .WithTags("Admin")
-      .RequireAuthorization("RequireAdminJwt");
+      .RequireAuthorization(nameof(AuthPolicy.RequireAdminJwt));
 
     vehicles
       .MapGet("", GetAllVehiclesAsync)

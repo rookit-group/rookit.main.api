@@ -3,6 +3,7 @@ using MainHub.Api.Services;
 using MainHub.Api.DTOs.ServiceHistory;
 using MainHub.Api.Filters;
 using MainHub.Api.DTOs;
+using MainHub.Api.Enums;
 
 namespace MainHub.Api.Endpoints;
 
@@ -13,7 +14,7 @@ public static partial class ServiceHistoryEndpoints
     var serviceHistory = app
       .MapGroup("/api/service-history")
       .WithTags("Service History")
-      .RequireAuthorization("RequireInternalJwt"); // Only Internal JWT tokens allowed
+      .RequireAuthorization(nameof(AuthPolicy.RequireMobileJwt));
 
     var _contentType = "application/json";
 
