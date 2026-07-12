@@ -78,6 +78,12 @@ public class ServiceHistoryService(
     await _repository.DeleteAllByVehicleIdAsync(vehicleId);
   }
 
+  // Builds the full replacement entity (parent fields + a brand new Records
+  // list with fresh ids) and hands it to the repository as one unit. The
+  // repository is what actually does the delete-all-records-then-reinsert
+  // dance against the service_history_records table (see
+  // ServiceHistoryRepository.UpdateAsync) - this service doesn't need to know
+  // that Postgres has no single-call "replace this embedded array" operation.
   public async Task UpdateAsync(Guid vehicleId, Guid serviceHistoryId, CreateServiceHistoryDetailsDto updateServiceHistoryDetailsDto, Guid userId)
   {
     await EnsureValidVehicleRequest(userId, vehicleId);
@@ -113,6 +119,9 @@ public class ServiceHistoryService(
     }
   }
 
+  // Records get a Guid.NewGuid() here because each one is now its own row
+  // (with its own primary key) in service_history_records, rather than a
+  // sub-document inside the parent's Records array that didn't need its own id.
   public async Task CreateAsync(Guid vehicleId, CreateServiceHistoryDetailsDto serviceHistoryDetails, Guid userId)
   {
     await EnsureValidVehicleRequest(userId, vehicleId);

@@ -12,8 +12,12 @@ public interface IRefreshTokenRepository
     Task DeleteExpiredAsync();
 }
 
+// Same shape as UserRepository: plain SQL strings + named @parameters, no
+// query builder, no Mongo Builders<T> equivalent needed since every query
+// here is a simple single-table statement.
 public class RefreshTokenRepository : IRefreshTokenRepository
 {
+    // Column order must match the ordinals read in Map(...) below.
     private const string SelectColumns =
         "id, token, user_id, provider_id, expires_at, created_at, is_revoked";
 
@@ -24,6 +28,7 @@ public class RefreshTokenRepository : IRefreshTokenRepository
         _dataSource = dataSource;
     }
 
+    // Mongo equivalent: _collection.InsertOneAsync(token).
     public async Task CreateAsync(RefreshTokenEntity token)
     {
         const string sql = @"
@@ -41,6 +46,7 @@ public class RefreshTokenRepository : IRefreshTokenRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // Mongo equivalent: .Find(t => t.Token == token).FirstOrDefaultAsync().
     public async Task<RefreshTokenEntity?> GetByTokenAsync(string token)
     {
         await using var cmd = _dataSource.CreateCommand(
@@ -50,6 +56,8 @@ public class RefreshTokenRepository : IRefreshTokenRepository
         return await reader.ReadAsync() ? Map(reader) : null;
     }
 
+    // Mongo equivalent: Builders<T>.Update.Set(t => t.IsRevoked, true) on a
+    // single matching document - here just a plain UPDATE ... SET.
     public async Task RevokeAsync(Guid id)
     {
         await using var cmd = _dataSource.CreateCommand(
@@ -58,6 +66,8 @@ public class RefreshTokenRepository : IRefreshTokenRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // Mongo equivalent: DeleteManyAsync(t => t.ExpiresAt < now) - a bulk
+    // delete matching a filter, same idea here with a plain WHERE clause.
     public async Task DeleteExpiredAsync()
     {
         await using var cmd = _dataSource.CreateCommand(
@@ -66,6 +76,8 @@ public class RefreshTokenRepository : IRefreshTokenRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // Manual ordinal-based row -> object mapping (see UserRepository.Map for
+    // the same pattern) - positions must match SelectColumns above exactly.
     private static RefreshTokenEntity Map(NpgsqlDataReader r) => new()
     {
         Id = r.GetGuid(0),

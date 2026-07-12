@@ -33,6 +33,16 @@ builder.Services.Configure<TelegramSettings>(
 );
 
 // 🟦 Register PostgreSQL data source as a singleton (built-in connection pooling)
+// This replaces the old IMongoClient singleton registration and the
+// BsonSerializer.RegisterSerializer(...) call that used to configure BSON
+// mapping - Npgsql needs no such global serializer setup. Connection info now
+// comes from the standard ASP.NET "ConnectionStrings:Main" config key instead
+// of a custom MongoDbSettings section (host/port/db were previously separate
+// settings; here they're all part of one Postgres connection string).
+// NpgsqlDataSourceBuilder(...).Build() creates the pooled data source itself;
+// repositories call _dataSource.CreateCommand(...) per operation and Npgsql
+// borrows/returns a physical connection from the pool automatically - there's
+// no manual "open a connection, remember to close it" step to manage.
 var connectionString = builder.Configuration.GetConnectionString("Main");
 if (string.IsNullOrEmpty(connectionString))
 {

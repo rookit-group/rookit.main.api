@@ -2,9 +2,17 @@ using MainHub.Api.Shared;
 
 namespace MainHub.Api.Models;
 
+// Plain C# class, no BSON attributes anymore - Npgsql doesn't map rows to
+// objects automatically, so each repository's Map(reader) method builds this
+// by hand from the raw columns (see VehicleRepository.cs).
 public class VehicleEntity
 {
     public required Guid Id { get; set; }
+
+    // Replaces the old UserEntity.VehicleIds array. Ownership is now a
+    // foreign key living on the "many" side (a vehicle points at one owner),
+    // matching the vehicles.user_id column in db/init.sql. Null means
+    // unowned/unattached, same idea as an unset field in Mongo.
     public Guid? UserId { get; set; }
     public required string LicensePlate { get; set; }
     public required string Vin { get; set; }

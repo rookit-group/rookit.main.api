@@ -1,6 +1,9 @@
 name: caramob
 
 services:
+  # Replaces the old "mongodb" service. Unlike Mongo, which just needs a data
+  # directory, Postgres needs a database/user created up front - POSTGRES_DB/
+  # POSTGRES_USER/POSTGRES_PASSWORD do that on first container start.
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -12,7 +15,15 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Mounting our schema file here makes Postgres run it automatically,
+      # exactly once, the first time the data volume is empty - this is what
+      # creates the tables/indexes from db/init.sql (there's no separate
+      # "migration" step to run by hand for this project).
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    # pg_isready checks that Postgres has actually finished starting up and can
+    # accept connections. mainhub-api's "depends_on: condition: service_healthy"
+    # below waits for this to pass before starting the app, so the app doesn't
+    # try to connect before the database (and its schema) is ready.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mainhub -d mainhub"]
       interval: 5s
@@ -27,6 +38,10 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5001
+      # Replaces the old MongoDbSettings__* env vars (connection string, db
+      # name, etc. as separate settings) with a single ADO.NET-style Postgres
+      # connection string, read by Program.cs via
+      # builder.Configuration.GetConnectionString("Main").
       - ConnectionStrings__Main=Host=postgres;Port=5432;Database=mainhub;Username=mainhub;Password=mainhub
     ports:
       - "5001:5001"

@@ -16,11 +16,24 @@ public interface IUserRepository
     Task<bool> UpdateProfileAsync(Guid id, string? name, string? email, DateTime updatedAt);
 }
 
+// Mongo equivalent of this whole class: IMongoCollection<UserEntity> plus
+// Builders<UserEntity>.Filter/Update. There's no driver-level query builder
+// here - every method writes its own SQL string with named @parameters, and
+// Npgsql only ever substitutes those parameters safely (never string-concats
+// user input into SQL - that's how you'd get SQL injection).
 public class UserRepository : IUserRepository
 {
+    // Column order here must match the order fields are read out by ordinal
+    // in Map(...) below - unlike Mongo, where BSON field names are matched by
+    // name automatically regardless of order.
     private const string SelectColumns =
         "id, name, email, provider_id, phone, picture_url, created_at, updated_at";
 
+    // NpgsqlDataSource is Npgsql's equivalent of IMongoClient - a shared,
+    // thread-safe object registered once as a singleton (see Program.cs) that
+    // owns a pool of physical connections. CreateCommand(sql) below grabs and
+    // returns a pooled connection per call automatically; you don't manage
+    // connections by hand.
     private readonly NpgsqlDataSource _dataSource;
 
     public UserRepository(NpgsqlDataSource dataSource)
@@ -28,6 +41,8 @@ public class UserRepository : IUserRepository
         _dataSource = dataSource;
     }
 
+    // Mongo equivalent: _collection.InsertOneAsync(user). Here we write the
+    // literal INSERT statement and bind each property to a named parameter.
     public async Task CreateAsync(UserEntity user)
     {
         const string sql = @"
@@ -37,6 +52,8 @@ public class UserRepository : IUserRepository
         await using var cmd = _dataSource.CreateCommand(sql);
         cmd.Parameters.AddWithValue("id", user.Id);
         cmd.Parameters.AddWithValue("name", user.Name);
+        // Nullable properties must be sent as DBNull.Value, not C# null - see
+        // NpgsqlReaderExtensions.NullableParam for why.
         cmd.Parameters.AddWithValue("email", NpgsqlReaderExtensions.NullableParam(user.Email));
         cmd.Parameters.AddWithValue("provider_id", user.ProviderId);
         cmd.Parameters.AddWithValue("phone", NpgsqlReaderExtensions.NullableParam(user.Phone));
@@ -46,6 +63,9 @@ public class UserRepository : IUserRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // Mongo equivalent: _collection.Find(u => u.Id == id).FirstOrDefaultAsync().
+    // ExecuteReaderAsync() gives back a forward-only cursor (NpgsqlDataReader);
+    // ReadAsync() advances to the first row and returns false if there wasn't one.
     public async Task<UserEntity?> GetByIdAsync(Guid id)
     {
         await using var cmd = _dataSource.CreateCommand($"SELECT {SelectColumns} FROM users WHERE id = @id");
@@ -68,6 +88,8 @@ public class UserRepository : IUserRepository
         return await ReadListAsync(cmd);
     }
 
+    // Mongo equivalent: .Find(...).Skip(skip).Limit(limit). Postgres calls
+    // these OFFSET/LIMIT instead, same meaning.
     public async Task<List<UserEntity>> GetAllUsersPagedAsync(int skip, int limit)
     {
         await using var cmd = _dataSource.CreateCommand(
@@ -77,6 +99,8 @@ public class UserRepository : IUserRepository
         return await ReadListAsync(cmd);
     }
 
+    // ExecuteScalarAsync() returns just the single value of the first column
+    // of the first row (here, the COUNT) rather than a full row/document.
     public async Task<long> CountAllUsersAsync()
     {
         await using var cmd = _dataSource.CreateCommand("SELECT COUNT(*) FROM users");
@@ -91,6 +115,13 @@ public class UserRepository : IUserRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // Mongo equivalent: Builders<UserEntity>.Update.Set(...) chained only for
+    // the fields that were actually provided. There's no update-builder API
+    // in raw SQL, so COALESCE(@name, name) does the same job: "use the new
+    // value if one was passed, otherwise keep the existing column value" -
+    // passing null for a field leaves that column untouched.
+    // ExecuteNonQueryAsync() returns the number of rows affected, which is
+    // how we know whether a matching row existed (Mongo's MatchedCount).
     public async Task<bool> UpdateProfileAsync(Guid id, string? name, string? email, DateTime updatedAt)
     {
         const string sql = @"
@@ -120,6 +151,10 @@ public class UserRepository : IUserRepository
         return results;
     }
 
+    // Manual row -> object mapping, since Npgsql has no auto-deserialization.
+    // Columns are read by *position* (0, 1, 2...) matching SelectColumns
+    // above exactly - unlike Mongo, which matches BSON fields by name, so
+    // reordering SelectColumns without updating these indexes breaks this.
     private static UserEntity Map(NpgsqlDataReader r) => new()
     {
         Id = r.GetGuid(0),

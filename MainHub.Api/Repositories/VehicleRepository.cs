@@ -36,6 +36,11 @@ public class VehicleRepository : IVehicleRepository
         _dataSource = dataSource;
     }
 
+    // Mongo equivalent: _collection.InsertOneAsync(vehicle). user_id is the FK
+    // that replaces the old UserEntity.VehicleIds array - ownership now lives
+    // here on the "many" side instead of as an id list on the user document.
+    // Enum properties (WheelDriveType/FuelType/TransmissionType) are written
+    // with .ToString() since the column is plain text, not a native PG enum.
     public async Task CreateAsync(VehicleEntity vehicle)
     {
         const string sql = @"
@@ -79,6 +84,10 @@ public class VehicleRepository : IVehicleRepository
         return await reader.ReadAsync() ? Map(reader) : null;
     }
 
+    // Mongo equivalent: .Find(Builders<T>.Filter.In(v => v.Id, ids)) - the
+    // "$in" operator. Postgres has no array-membership filter operator, so we
+    // pass a real C# array as a single parameter typed as an array of uuid
+    // (NpgsqlDbType.Array | NpgsqlDbType.Uuid) and match with ANY(@ids).
     public async Task<List<VehicleEntity>> GetByIdsAsync(List<Guid> ids)
     {
         if (ids.Count == 0) return [];
@@ -109,6 +118,9 @@ public class VehicleRepository : IVehicleRepository
         return Convert.ToInt64(await cmd.ExecuteScalarAsync());
     }
 
+    // This is the direct replacement for the old "look up user.VehicleIds,
+    // then fetch each vehicle" pattern - since ownership is now a column on
+    // this table, "get a user's vehicles" is just a WHERE user_id = ... query.
     public async Task<List<VehicleEntity>> GetAllByUserAsync(Guid userId)
     {
         await using var cmd = _dataSource.CreateCommand(
@@ -117,6 +129,10 @@ public class VehicleRepository : IVehicleRepository
         return await ReadListAsync(cmd);
     }
 
+    // Ownership check used to be "is this vehicle's id in user.VehicleIds?".
+    // Now it's "does a row exist with this id AND this user_id?". SELECT 1
+    // (rather than SELECT *) just asks Postgres for the cheapest possible
+    // existence check; ExecuteScalarAsync returns null if no row matched.
     public async Task<bool> BelongsToUserAsync(Guid vehicleId, Guid userId)
     {
         await using var cmd = _dataSource.CreateCommand(
@@ -127,6 +143,10 @@ public class VehicleRepository : IVehicleRepository
         return result is not null;
     }
 
+    // Builds a vehicleId -> ownerUserId lookup in one round trip, given a
+    // batch of vehicle ids (again using ANY(@ids), same as GetByIdsAsync).
+    // This replaces manually walking each user's VehicleIds array to figure
+    // out who owns what - here ownership is just read straight off the rows.
     public async Task<Dictionary<Guid, Guid>> GetOwnerMapAsync(IReadOnlyCollection<Guid> vehicleIds)
     {
         var result = new Dictionary<Guid, Guid>();
@@ -143,6 +163,10 @@ public class VehicleRepository : IVehicleRepository
         return result;
     }
 
+    // Mongo equivalent: Builders<UserEntity>.Update.Push(u => u.VehicleIds, id)
+    // (adding a vehicle to the user's array). Here "attaching" a vehicle to a
+    // user is just setting this row's own user_id column - no second document
+    // to update, because there's no array living on the user side anymore.
     public async Task<bool> AttachAsync(Guid vehicleId, Guid userId)
     {
         await using var cmd = _dataSource.CreateCommand(
@@ -153,6 +177,10 @@ public class VehicleRepository : IVehicleRepository
         return rows > 0;
     }
 
+    // Mongo equivalent: Builders<UserEntity>.Update.Pull(u => u.VehicleIds, id).
+    // "Detaching" just nulls out user_id on this row. The extra
+    // "AND user_id = @user_id" guards against detaching a vehicle that's
+    // already been reassigned to a different user out from under them.
     public async Task<bool> DetachAsync(Guid vehicleId, Guid userId)
     {
         await using var cmd = _dataSource.CreateCommand(
@@ -163,6 +191,15 @@ public class VehicleRepository : IVehicleRepository
         return rows > 0;
     }
 
+    // Partial update, same idea as UserRepository.UpdateProfileAsync:
+    // COALESCE(@param, column) means "if the DTO didn't supply this field
+    // (parameter is DBNull), keep the existing column value" - this is the
+    // SQL stand-in for Mongo's Builders<T>.Update.Set(...) chain, which only
+    // ever touched the fields you explicitly called .Set() for.
+    // Each parameter here is added with an explicit NpgsqlDbType instead of
+    // AddWithValue, because when the DTO field is null we hand Npgsql a bare
+    // DBNull.Value - without a declared type it can't infer what PG column
+    // type that DBNull is supposed to correspond to.
     public async Task<bool> UpdateAsync(Guid id, UpdateVehicleDto dto, DateTime updatedAt)
     {
         const string sql = @"
@@ -203,6 +240,10 @@ public class VehicleRepository : IVehicleRepository
         return results;
     }
 
+    // Manual ordinal-based mapping again (see UserRepository.Map) - column
+    // positions here must match SelectColumns exactly. GetEnum<T>() parses the
+    // plain-text column back into the C# enum (the reverse of .ToString() in
+    // CreateAsync above).
     private static VehicleEntity Map(NpgsqlDataReader r) => new()
     {
         Id = r.GetGuid(0),

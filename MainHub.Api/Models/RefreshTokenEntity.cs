@@ -1,5 +1,7 @@
 namespace MainHub.Api.Models;
 
+// Shape is unchanged from Mongo - plain C# class, no BSON attributes needed
+// since Npgsql maps rows to this manually (see RefreshTokenRepository.Map).
 public class RefreshTokenEntity
 {
     public required Guid Id { get; set; }

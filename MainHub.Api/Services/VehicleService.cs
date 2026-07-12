@@ -16,6 +16,9 @@ public interface IVehicleService
     Task<PagedResultDto<AdminVehicleListItemDto>> GetAllVehiclesAsync(int page, int pageSize);
 }
 
+// No more MongoDB.Driver / FilterDefinition / UpdateDefinition here -
+// ownership checks and partial updates are now plain repository calls backed
+// by SQL (see VehicleRepository.BelongsToUserAsync/UpdateAsync).
 public class VehicleService(
   IVehicleRepository repository,
   IUserService userService,
@@ -26,6 +29,7 @@ public class VehicleService(
     private readonly IUserService _userService = userService;
     private readonly IServiceHistoryService _serviceHistoryService = serviceHistoryService;
 
+    // BelongsToUserAsync replaces what used to be checking user.VehicleIds.Contains(vehicleId).
     public async Task<VehicleDto> GetVehicleByIdAsync(Guid vehicleId, Guid userId)
     {
         if (!await _repository.BelongsToUserAsync(vehicleId, userId))
@@ -53,6 +57,10 @@ public class VehicleService(
         return MapVehicleDto(vehicle);
     }
 
+    // updateVehicleDto's null fields are left untouched thanks to the
+    // COALESCE(...) pattern in VehicleRepository.UpdateAsync - this service
+    // doesn't need to build a partial update itself the way a Mongo
+    // Builders<T>.Update.Set(...) chain would have required.
     public async Task UpdateAsync(Guid vehicleId, UpdateVehicleDto updateVehicleDto, Guid userId)
     {
         if (!await _repository.BelongsToUserAsync(vehicleId, userId))
@@ -67,6 +75,10 @@ public class VehicleService(
         }
     }
 
+    // Deleting the vehicle row cascades to service_histories and
+    // service_history_records automatically (see db/init.sql FKs), so this
+    // only needs to explicitly clean up service history state that isn't
+    // covered by the DB cascade before removing the vehicle itself.
     public async Task DeleteAsync(Guid vehicleId, Guid userId)
     {
         if (!await _repository.BelongsToUserAsync(vehicleId, userId))
@@ -78,6 +90,9 @@ public class VehicleService(
         await _repository.DeleteAsync(vehicleId);
     }
 
+    // Directly queries vehicles WHERE user_id = userId (see
+    // VehicleRepository.GetAllByUserAsync) - no more "load user.VehicleIds,
+    // then fetch each vehicle by id" two-step lookup.
     public async Task<List<VehicleListItemDto>> GetAllByUserAsync(Guid userId)
     {
         var user = await _userService.GetByIdAsync(userId);
@@ -98,6 +113,9 @@ public class VehicleService(
         }).ToList();
     }
 
+    // vehicle.UserId is set directly on the new row here - this is the whole
+    // "attach" step now, since ownership is this FK column rather than a
+    // separate write to append to the user's VehicleIds array.
     public async Task CreateAsync(CreateVehicleDto createVehicleDto, Guid userId)
     {
         var vehicle = new VehicleEntity
@@ -131,6 +149,9 @@ public class VehicleService(
 
         var vehicles = await _repository.GetAllVehiclesAsync(skip, limit);
         var totalItems = (int)await _repository.GetCountAsync();
+        // ownerMap comes from one batch query on vehicles.user_id (see
+        // VehicleRepository.GetOwnerMapAsync) instead of walking every user's
+        // VehicleIds array to find whoever owns each vehicle id.
         var ownerMap = await _userService.GetOwnerMapByVehicleIdsAsync(vehicles.Select(v => v.Id).ToList());
         var items = vehicles.Select(v => MapAdminVehicleListItem(v, ownerMap)).ToList();
 
