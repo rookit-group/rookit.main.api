@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore MainHub.Api/MainHub.Api.sln
+
+      - name: Build
+        run: dotnet build MainHub.Api/MainHub.Api.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test MainHub.Api.IntegrationTests/MainHub.Api.IntegrationTests.csproj --configuration Release --no-build --verbosity normal
