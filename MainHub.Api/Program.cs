@@ -14,6 +14,7 @@ using AspNetCore.Swagger.Themes;
 using Microsoft.AspNetCore.Authorization;
 using Npgsql;
 using MainHub.Api.Enums;
+using Minio;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,6 +39,11 @@ builder.Services.Configure<TelegramSettings>(
     builder.Configuration.GetSection("TelegramSettings")
 );
 
+// 🟦 Load Minio (S3-compatible object storage) settings from configuration file
+builder.Services.Configure<MinioSettings>(
+    builder.Configuration.GetSection("MinioSettings")
+);
+
 // 🟦 Register PostgreSQL data source as a singleton (built-in connection pooling)
 // This replaces the old IMongoClient singleton registration and the
 // BsonSerializer.RegisterSerializer(...) call that used to configure BSON
@@ -56,6 +62,23 @@ if (string.IsNullOrEmpty(connectionString))
 }
 builder.Services.AddSingleton(new NpgsqlDataSourceBuilder(connectionString).Build());
 
+// 🟦 Register Minio client as a singleton. The client is thread-safe and holds
+// an HttpClient internally, so a single instance is reused across requests.
+var minioSettings = builder.Configuration.GetSection("MinioSettings").Get<MinioSettings>();
+if (minioSettings == null || string.IsNullOrEmpty(minioSettings.Endpoint))
+{
+    throw new InvalidOperationException("MinioSettings is not configured properly.");
+}
+builder.Services.AddSingleton<IMinioClient>(_ =>
+{
+    var minioBuilder = new MinioClient()
+        .WithEndpoint(minioSettings.Endpoint)
+        .WithCredentials(minioSettings.AccessKey, minioSettings.SecretKey);
+    if (minioSettings.UseSsl) minioBuilder = minioBuilder.WithSSL();
+    if (!string.IsNullOrEmpty(minioSettings.Region)) minioBuilder = minioBuilder.WithRegion(minioSettings.Region);
+    return minioBuilder.Build();
+});
+
 // 🟦 Register application services 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IVehicleRepository, VehicleRepository>();
@@ -68,6 +91,7 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IVehicleService, VehicleService>();
 builder.Services.AddScoped<IServiceHistoryService, ServiceHistoryService>();
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+builder.Services.AddSingleton<IMinioService, MinioService>();
 
 builder.Services.AddSingleton<IAuthorizationHandler, AllowedTelegramAdminAuthorizationHandler>();
 
@@ -224,6 +248,14 @@ builder.Services.AddAuthorization(options =>
 });
 
 var app = builder.Build();
+
+// 🟦 Ensure the default Minio bucket exists on startup. This creates it lazily
+// on first run so no manual bucket provisioning is required in dev environments.
+using (var scope = app.Services.CreateScope())
+{
+    var minio = scope.ServiceProvider.GetRequiredService<IMinioService>();
+    await minio.EnsureBucketAsync();
+}
 
 // 🟦 Enable Swagger for testing APIs
 if (app.Environment.IsDevelopment())

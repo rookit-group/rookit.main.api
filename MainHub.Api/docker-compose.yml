@@ -1,4 +1,4 @@
-name: caramob
+name: rookit_mainhub_api
 
 services:
   # Replaces the old "mongodb" service. Unlike Mongo, which just needs a data
@@ -43,11 +43,38 @@ services:
       # connection string, read by Program.cs via
       # builder.Configuration.GetConnectionString("Main").
       - ConnectionStrings__Main=Host=postgres;Port=5432;Database=mainhub;Username=mainhub;Password=mainhub
+      # Override MinioSettings__Endpoint for the compose network - inside the
+      # network the app reaches Minio via the service name, not localhost.
+      - MinioSettings__Endpoint=minio:9000
     ports:
       - "5001:5001"
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # S3-compatible object storage. The console (port 9001) is exposed for local
+  # debugging; the S3 API lives on port 9000. Credentials here must match the
+  # MinioSettings AccessKey/SecretKey in appsettings.json (or the app's env
+  # overrides above).
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: mainhub
+      MINIO_ROOT_PASSWORD: mainhub-minio-password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   ngrok:
     image: ngrok/ngrok:latest
@@ -62,3 +89,4 @@ services:
 
 volumes:
   postgres_data:
+  minio_data:
