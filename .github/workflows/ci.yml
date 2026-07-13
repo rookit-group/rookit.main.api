@@ -17,10 +17,10 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Restore
-        run: dotnet restore MainHub.Api/MainHub.Api.sln
+        run: dotnet restore MainHub.Api.sln
 
       - name: Build
-        run: dotnet build MainHub.Api/MainHub.Api.sln --configuration Release --no-restore
+        run: dotnet build MainHub.Api.sln --configuration Release --no-restore
 
       - name: Test
         run: dotnet test MainHub.Api.IntegrationTests/MainHub.Api.IntegrationTests.csproj --configuration Release --no-build --verbosity normal
