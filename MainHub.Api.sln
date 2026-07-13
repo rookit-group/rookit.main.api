@@ -2,11 +2,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainHub.Api", "MainHub.Api.csproj", "{8C19A238-9370-7AF2-9A91-A095E0862C84}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainHub.Api", "MainHub.Api\MainHub.Api.csproj", "{8C19A238-9370-7AF2-9A91-A095E0862C84}"
 EndProject
-Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{C1D2E3F4-A5B6-4890-CDEF-012345678901}"
+Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "MainHub.Api\docker-compose.dcproj", "{C1D2E3F4-A5B6-4890-CDEF-012345678901}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainHub.Api.IntegrationTests", "..\MainHub.Api.IntegrationTests\MainHub.Api.IntegrationTests.csproj", "{9D3E4F5A-6B7C-4D8E-9F01-234567890ABC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainHub.Api.IntegrationTests", "MainHub.Api.IntegrationTests\MainHub.Api.IntegrationTests.csproj", "{9D3E4F5A-6B7C-4D8E-9F01-234567890ABC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
