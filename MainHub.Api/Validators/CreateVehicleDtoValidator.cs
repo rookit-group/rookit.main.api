@@ -94,6 +94,11 @@ public class CreateVehicleDtoValidator : AbstractValidator<CreateVehicleDto>
     RuleFor(x => x.WheelDriveType)
       .IsInEnum()
       .WithMessage("Wheel drive type must be a valid wheel drive type.");
+
+    RuleFor(x => x.PhotoStorageKeys!.Count)
+      .LessThanOrEqualTo(10)
+      .WithMessage("A vehicle can have at most 10 photos.")
+      .When(x => x.PhotoStorageKeys is not null);
   }
 }
 

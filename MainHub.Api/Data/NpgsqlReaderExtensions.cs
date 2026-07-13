@@ -32,6 +32,12 @@ internal static class NpgsqlReaderExtensions
     public static Guid? GetNullableGuid(this NpgsqlDataReader reader, int ordinal)
         => reader.IsDBNull(ordinal) ? null : reader.GetGuid(ordinal);
 
+    // Postgres text[] columns come back as string[] via GetFieldValue - the
+    // driver already handles the array-to-managed-array marshaling; we just
+    // want a mutable List on the C# side and null when the column is NULL.
+    public static List<string>? GetNullableStringList(this NpgsqlDataReader reader, int ordinal)
+        => reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<string[]>(ordinal).ToList();
+
     // Enums are stored as plain text columns (e.g. "Petrol", "Awd") instead of
     // a Mongo BsonRepresentation(BsonType.String) attribute on the property.
     // Reading one back means parsing that text into the C# enum by hand.

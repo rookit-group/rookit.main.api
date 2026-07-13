@@ -68,12 +68,12 @@ public class VehicleService(
         }
 
         // Storage keys arrive from the client, so we can't blindly trust them:
-        // enforce the per-user prefix and confirm the object actually exists in
-        // Minio before persisting the pointer. Old photo objects, if any, are
-        // left in place - a scheduled GC job sweeps unreferenced ones later.
-        if (updateVehicleDto.PhotoStorageKey is not null)
+        // enforce the per-user prefix and confirm each object actually exists
+        // in Minio before persisting the pointers. Old photo objects, if any,
+        // are left in place - a scheduled GC job sweeps unreferenced ones later.
+        if (updateVehicleDto.PhotoStorageKeys is { Count: > 0 })
         {
-            await ValidatePhotoStorageKeyAsync(updateVehicleDto.PhotoStorageKey, userId);
+            await ValidatePhotoStorageKeysAsync(updateVehicleDto.PhotoStorageKeys, userId);
         }
 
         var updated = await _repository.UpdateAsync(vehicleId, updateVehicleDto, DateTime.UtcNow);
@@ -110,16 +110,16 @@ public class VehicleService(
             Brand = v.Brand,
             Model = v.Model,
             Year = v.Year,
-            PhotoUrl = await ResolvePhotoUrlAsync(v.PhotoStorageKey),
+            PhotoUrls = await ResolvePhotoUrlsAsync(v.PhotoStorageKeys),
         }));
         return items.ToList();
     }
 
     public async Task CreateAsync(CreateVehicleDto createVehicleDto, Guid userId)
     {
-        if (createVehicleDto.PhotoStorageKey is not null)
+        if (createVehicleDto.PhotoStorageKeys is { Count: > 0 })
         {
-            await ValidatePhotoStorageKeyAsync(createVehicleDto.PhotoStorageKey, userId);
+            await ValidatePhotoStorageKeysAsync(createVehicleDto.PhotoStorageKeys, userId);
         }
 
         var vehicle = new VehicleEntity
@@ -141,7 +141,7 @@ public class VehicleService(
             Mileage = createVehicleDto.Mileage,
             WheelDriveType = createVehicleDto.WheelDriveType,
             Year = createVehicleDto.Year,
-            PhotoStorageKey = createVehicleDto.PhotoStorageKey,
+            PhotoStorageKeys = createVehicleDto.PhotoStorageKeys,
         };
 
         await _repository.CreateAsync(vehicle);
@@ -177,7 +177,7 @@ public class VehicleService(
     private static string BuildPhotoStorageKey(Guid userId) =>
         $"vehicles/photos/{userId}/{Guid.NewGuid():N}";
 
-    // Two guarantees, in order:
+    // Two guarantees per key, in order:
     //   1. The key sits under this user's prefix - prevents a client from
     //      pasting someone else's key into their own CreateVehicleDto.
     //   2. An object actually exists at that key - prevents saving pointers
@@ -196,8 +196,18 @@ public class VehicleService(
         }
     }
 
-    private async Task<string?> ResolvePhotoUrlAsync(string? storageKey) =>
-        string.IsNullOrEmpty(storageKey) ? null : await _minioService.GetPresignedGetUrlAsync(storageKey);
+    private async Task ValidatePhotoStorageKeysAsync(IReadOnlyList<string> storageKeys, Guid userId)
+    {
+        foreach (var key in storageKeys)
+        {
+            await ValidatePhotoStorageKeyAsync(key, userId);
+        }
+    }
+
+    private async Task<List<string>> ResolvePhotoUrlsAsync(List<string>? storageKeys) =>
+        storageKeys is null || storageKeys.Count == 0
+            ? []
+            : (await Task.WhenAll(storageKeys.Select(k => _minioService.GetPresignedGetUrlAsync(k)))).ToList();
 
     private async Task<VehicleDto> MapVehicleDtoAsync(VehicleEntity vehicle) => new()
     {
@@ -215,7 +225,7 @@ public class VehicleService(
         TransmissionType = vehicle.TransmissionType,
         WheelDriveType = vehicle.WheelDriveType,
         Mileage = vehicle.Mileage,
-        PhotoUrl = await ResolvePhotoUrlAsync(vehicle.PhotoStorageKey),
+        PhotoUrls = await ResolvePhotoUrlsAsync(vehicle.PhotoStorageKeys),
         CreatedAt = vehicle.CreatedAt,
         UpdatedAt = vehicle.UpdatedAt,
     };
@@ -239,7 +249,7 @@ public class VehicleService(
             Brand = vehicle.Brand,
             Model = vehicle.Model,
             Year = vehicle.Year,
-            PhotoUrl = await ResolvePhotoUrlAsync(vehicle.PhotoStorageKey),
+            PhotoUrls = await ResolvePhotoUrlsAsync(vehicle.PhotoStorageKeys),
             OwnerUserId = ownerUserId,
         };
     }

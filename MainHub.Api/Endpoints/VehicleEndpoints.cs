@@ -186,6 +186,12 @@ public static partial class VehicleEndpoints
         return Results.BadRequest("Photo file is required.");
       }
 
+      const long maxBytes = 5 * 1024 * 1024;
+      if (file.Length > maxBytes)
+      {
+        return Results.BadRequest("Photo must be 5 MB or smaller.");
+      }
+
       var contentType = string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType;
       if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
       {

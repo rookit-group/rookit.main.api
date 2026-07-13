@@ -34,6 +34,11 @@ public class UpdateVehicleDtoValidator : AbstractValidator<UpdateVehicleDto>
       .WithMessage("Mileage cannot be negative.")
       .LessThanOrEqualTo(1000000)
       .WithMessage("Mileage must be less than or equal to 1,000,000.");
+
+    RuleFor(x => x.PhotoStorageKeys!.Count)
+      .LessThanOrEqualTo(10)
+      .WithMessage("A vehicle can have at most 10 photos.")
+      .When(x => x.PhotoStorageKeys is not null);
   }
 }
 
