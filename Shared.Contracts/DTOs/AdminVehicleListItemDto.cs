@@ -1,7 +1,4 @@
-using MainHub.Api.Models;
-using MainHub.Api.Shared;
-
-namespace MainHub.Api.DTOs;
+namespace Shared.Contracts.DTOs;
 
 public class AdminVehicleListItemDto : VehicleListItemDto
 {

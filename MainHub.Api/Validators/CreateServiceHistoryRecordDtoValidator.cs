@@ -1,5 +1,5 @@
 using FluentValidation;
-using MainHub.Api.DTOs.ServiceHistory;
+using Shared.Contracts.DTOs.ServiceHistory;
 
 namespace MainHub.Api.Validators;
 

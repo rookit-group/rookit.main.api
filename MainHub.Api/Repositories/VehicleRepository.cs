@@ -1,5 +1,6 @@
 using MainHub.Api.Data;
-using MainHub.Api.DTOs;
+using Shared.Contracts.DTOs;
+using Shared.Contracts.Enums;
 using MainHub.Api.Models;
 using NpgsqlTypes;
 using Npgsql;
@@ -255,10 +256,10 @@ public class VehicleRepository : IVehicleRepository
         Model = r.GetString(5),
         Year = r.GetInt32(6),
         BoughtAt = r.GetNullableDateTime(7),
-        WheelDriveType = r.GetEnum<Shared.WheelDriveType>(8),
+        WheelDriveType = r.GetEnum<WheelDriveType>(8),
         EngineCapacity = r.GetInt32(9),
-        FuelType = r.GetEnum<Shared.FuelType>(10),
-        TransmissionType = r.GetEnum<Shared.TransmissionType>(11),
+        FuelType = r.GetEnum<FuelType>(10),
+        TransmissionType = r.GetEnum<TransmissionType>(11),
         EnginePower = r.GetInt32(12),
         Color = r.GetString(13),
         Mileage = r.GetInt32(14),

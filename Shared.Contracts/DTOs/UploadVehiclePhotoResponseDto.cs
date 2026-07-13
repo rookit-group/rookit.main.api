@@ -1,4 +1,4 @@
-namespace MainHub.Api.DTOs;
+namespace Shared.Contracts.DTOs;
 
 /// <summary>
 /// Response returned by the vehicle photo upload endpoint. The client stores

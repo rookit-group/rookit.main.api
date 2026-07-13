@@ -1,6 +1,4 @@
-using MainHub.Api.Models;
-
-namespace MainHub.Api.DTOs;
+namespace Shared.Contracts.DTOs;
 
 /// <summary>
 /// Represents a DTO for retrieving the current user's information.
@@ -32,20 +30,5 @@ public class GetMeDto
   /// </summary>
   public required string? PictureUrl { get; set; }
 
-  /// <summary>
-  /// Explicitly converts a <see cref="UserEntity"/> to a <see cref="GetMeDto"/>.
-  /// </summary>
-  /// <param name="user">The user entity to convert.</param>
-  /// <returns>A <see cref="GetMeDto"/> containing the user's information.</returns>
-  public static explicit operator GetMeDto(UserEntity user)
-  {
-    return new GetMeDto
-    {
-      Name = user.Name,
-      Email = user.Email,
-      UpdatedAt = user.UpdatedAt,
-      Phone = user.Phone,
-      PictureUrl = user.PictureUrl,
-    };
-  }
+
 }

@@ -1,7 +1,7 @@
-using MainHub.Api.DTOs;
-using MainHub.Api.DTOs.ServiceHistory;
+using Shared.Contracts.DTOs.ServiceHistory;
 using MainHub.Api.Services;
 using MainHub.Api.Enums;
+using Shared.Contracts.DTOs;
 
 namespace MainHub.Api.Endpoints;
 

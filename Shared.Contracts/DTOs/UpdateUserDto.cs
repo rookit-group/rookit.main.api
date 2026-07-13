@@ -1,4 +1,4 @@
-namespace MainHub.Api.DTOs
+namespace Shared.Contracts.DTOs
 {
   /// <summary>
   /// Represents an update user DTO.

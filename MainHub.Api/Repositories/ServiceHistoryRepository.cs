@@ -1,6 +1,5 @@
 using MainHub.Api.Data;
 using MainHub.Api.Models;
-using NpgsqlTypes;
 using Npgsql;
 
 namespace MainHub.Api.Repositories;

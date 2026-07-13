@@ -24,6 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Shared.Contracts\Shared.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="..\MainHub.Api\db\init.sql">
       <Link>db\init.sql</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

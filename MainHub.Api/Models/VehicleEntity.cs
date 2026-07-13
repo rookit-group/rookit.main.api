@@ -1,4 +1,4 @@
-using MainHub.Api.Shared;
+using Shared.Contracts.Enums;
 
 namespace MainHub.Api.Models;
 

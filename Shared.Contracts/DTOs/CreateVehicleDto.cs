@@ -1,6 +1,6 @@
-using MainHub.Api.Shared;
+using Shared.Contracts.Enums;
 
-namespace MainHub.Api.DTOs
+namespace Shared.Contracts.DTOs
 {
   /// <summary>
   /// Represents a vehicle DTO for creating a new vehicle.

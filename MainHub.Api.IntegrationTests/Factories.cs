@@ -1,5 +1,5 @@
 using MainHub.Api.Models;
-using MainHub.Api.Shared;
+using Shared.Contracts.Enums;
 
 namespace MainHub.Api.IntegrationTests;
 

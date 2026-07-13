@@ -1,5 +1,5 @@
 using MainHub.Api.Repositories;
-using MainHub.Api.DTOs;
+using Shared.Contracts.DTOs;
 using MainHub.Api.Models;
 using MainHub.Api.Shared;
 

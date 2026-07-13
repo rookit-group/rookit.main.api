@@ -1,9 +1,8 @@
 using System.Security.Claims;
 using MainHub.Api.Services;
-using MainHub.Api.DTOs.ServiceHistory;
 using MainHub.Api.Filters;
-using MainHub.Api.DTOs;
 using MainHub.Api.Enums;
+using Shared.Contracts.DTOs.ServiceHistory;
 
 namespace MainHub.Api.Endpoints;
 

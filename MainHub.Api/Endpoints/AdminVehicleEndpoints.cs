@@ -1,4 +1,4 @@
-using MainHub.Api.DTOs;
+using Shared.Contracts.DTOs;
 using MainHub.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using MainHub.Api.Enums;

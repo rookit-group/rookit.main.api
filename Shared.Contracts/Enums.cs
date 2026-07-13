@@ -1,4 +1,4 @@
-namespace MainHub.Api.Shared
+namespace Shared.Contracts.Enums
 {
     /// <summary>
     /// Wheel Drive Type enumeration

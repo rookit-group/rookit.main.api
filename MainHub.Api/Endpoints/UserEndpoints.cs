@@ -1,4 +1,4 @@
-using MainHub.Api.DTOs;
+using Shared.Contracts.DTOs;
 using MainHub.Api.Filters;
 using MainHub.Api.Services;
 using System.Security.Claims;

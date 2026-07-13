@@ -1,6 +1,6 @@
 using MainHub.Api.Models;
 using MainHub.Api.Repositories;
-using MainHub.Api.DTOs;
+using Shared.Contracts.DTOs;
 using MainHub.Api.Shared;
 
 namespace MainHub.Api.Services;
@@ -84,7 +84,14 @@ public class UserService(IUserRepository repository, IVehicleRepository vehicleR
             throw new KeyNotFoundException("User not found.");
         }
 
-        return (GetMeDto)user;
+        return new GetMeDto
+        {
+            Name = user.Name,
+            Email = user.Email,
+            Phone = user.Phone,
+            PictureUrl = user.PictureUrl,
+            UpdatedAt = user.UpdatedAt,
+        };
     }
 
     public async Task<List<UserEntity>> GetAllAsync() => await _repository.GetAllAsync();
@@ -138,7 +145,16 @@ public class UserService(IUserRepository repository, IVehicleRepository vehicleR
 
         return new PagedResultDto<AdminUserListItemDto>
         {
-            Items = items.Select(d => (AdminUserListItemDto)d).ToList(),
+            Items = items.Select(d => new AdminUserListItemDto
+            {
+                Id = d.Id,
+                Name = d.Name,
+                Email = d.Email,
+                Phone = d.Phone,
+                PictureUrl = d.PictureUrl,
+                ProviderId = d.ProviderId,
+                CreatedAt = d.CreatedAt,
+            }).ToList(),
             TotalItems = totalItems,
         };
     }

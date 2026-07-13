@@ -1,4 +1,3 @@
-using MainHub.Api.Data;
 using MainHub.Api.Models;
 using Npgsql;
 

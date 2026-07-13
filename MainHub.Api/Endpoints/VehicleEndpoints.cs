@@ -1,5 +1,5 @@
 using Arex388.NhtsaVpic;
-using MainHub.Api.DTOs;
+using Shared.Contracts.DTOs;
 using MainHub.Api.Enums;
 using MainHub.Api.Filters;
 using MainHub.Api.Services;

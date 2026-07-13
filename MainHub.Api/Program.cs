@@ -9,7 +9,6 @@ using FluentValidation;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Arex388.NhtsaVpic.Extensions.Microsoft.DependencyInjection;
-using MainHub.Api.DTOs;
 using AspNetCore.Swagger.Themes;
 using Microsoft.AspNetCore.Authorization;
 using Npgsql;
@@ -100,7 +99,7 @@ builder.Services.AddNhtsaVpic();
 
 // 🟦 Register FluentValidation validators
 builder.Services.AddValidatorsFromAssemblyContaining<UpdateUserDtoValidator>();
-builder.Services.AddValidatorsFromAssemblyContaining<CreateVehicleDto>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateVehicleDtoValidator>();
 builder.Services.AddValidatorsFromAssemblyContaining<UpdateVehicleDtoValidator>();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateServiceHistoryDetailsDtoValidator>();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateServiceHistoryRecordDtoValidator>();

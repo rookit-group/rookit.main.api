@@ -1,7 +1,8 @@
 using System.Text.RegularExpressions;
 using FluentValidation;
-using MainHub.Api.DTOs;
-using MainHub.Api.Shared;
+using Shared.Contracts.DTOs;
+using Shared.Contracts.Enums;
+
 
 namespace MainHub.Api.Validators;
 

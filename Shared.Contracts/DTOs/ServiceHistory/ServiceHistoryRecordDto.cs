@@ -1,4 +1,4 @@
-namespace MainHub.Api.DTOs.ServiceHistory;
+namespace Shared.Contracts.DTOs.ServiceHistory;
 
 /// <summary>
 /// Represents a detailed info of a service history record

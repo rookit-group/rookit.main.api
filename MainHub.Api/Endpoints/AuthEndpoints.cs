@@ -1,5 +1,5 @@
 using MainHub.Api.Config;
-using MainHub.Api.DTOs;
+using Shared.Contracts.DTOs;
 using MainHub.Api.Services;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;

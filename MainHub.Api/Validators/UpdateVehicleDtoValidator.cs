@@ -1,5 +1,5 @@
 using FluentValidation;
-using MainHub.Api.DTOs;
+using Shared.Contracts.DTOs;
 
 namespace MainHub.Api.Validators;
 

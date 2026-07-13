@@ -1,7 +1,7 @@
-using MainHub.Api.DTOs;
 using MainHub.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using MainHub.Api.Enums;
+using Shared.Contracts.DTOs;
 
 namespace MainHub.Api.Endpoints;
 

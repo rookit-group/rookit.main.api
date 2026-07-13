@@ -1,5 +1,5 @@
-using MainHub.Api.DTOs.ServiceHistory;
-using MainHub.Api.DTOs;
+using Shared.Contracts.DTOs.ServiceHistory;
+using Shared.Contracts.DTOs;
 using MainHub.Api.Repositories;
 using MainHub.Api.Models;
 

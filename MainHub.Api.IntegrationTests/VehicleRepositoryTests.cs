@@ -1,4 +1,5 @@
-using MainHub.Api.DTOs;
+using Shared.Contracts.DTOs;
+using Shared.Contracts.Enums;
 using MainHub.Api.Repositories;
 using MainHub.Api.Shared;
 using Xunit;
