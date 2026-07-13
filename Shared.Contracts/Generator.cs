@@ -7,5 +7,6 @@ public class Generator : GenerationSpec
   public Generator()
   {
     AddInterface<Class1>();
+    AddInterface<OlehDto>();
   }
 }
