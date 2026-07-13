@@ -26,8 +26,10 @@ namespace MainHub.Api.DTOs
     public required int? Mileage { get; set; }
 
     /// <summary>
-    /// The photo URL of the vehicle.
+    /// Optional storage key of a photo previously uploaded via the
+    /// vehicle photo upload endpoint. Null leaves the existing photo
+    /// (if any) untouched.
     /// </summary>
-    public string? PhotoUrl { get; set; } = null;
+    public string? PhotoStorageKey { get; set; } = null;
   }
 }

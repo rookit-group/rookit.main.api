@@ -45,7 +45,7 @@ public class VehicleRepositoryTests : IAsyncLifetime
             enginePower: 195,
             color: "Blue",
             mileage: 4200,
-            photoUrl: "https://example.com/sonata.png",
+            photoStorageKey: "vehicles/photos/test/sonata",
             updatedAt: new DateTime(2026, 5, 5, 5, 5, 5, DateTimeKind.Utc));
 
         await _sut.CreateAsync(vehicle);
@@ -67,20 +67,20 @@ public class VehicleRepositoryTests : IAsyncLifetime
         Assert.Equal(vehicle.EnginePower, fetched.EnginePower);
         Assert.Equal(vehicle.Color, fetched.Color);
         Assert.Equal(vehicle.Mileage, fetched.Mileage);
-        Assert.Equal(vehicle.PhotoUrl, fetched.PhotoUrl);
+        Assert.Equal(vehicle.PhotoStorageKey, fetched.PhotoStorageKey);
         Assert.Equal(vehicle.CreatedAt, fetched.CreatedAt);
         Assert.Equal(vehicle.UpdatedAt, fetched.UpdatedAt);
     }
 
     [Fact]
-    public async Task Create_persists_null_user_id_and_null_photo_url()
+    public async Task Create_persists_null_user_id_and_null_photo_storage_key()
     {
-        var vehicle = Factories.Vehicle(userId: null, photoUrl: null, updatedAt: null);
+        var vehicle = Factories.Vehicle(userId: null, photoStorageKey: null, updatedAt: null);
         await _sut.CreateAsync(vehicle);
         var fetched = await _sut.GetByIdAsync(vehicle.Id);
         Assert.NotNull(fetched);
         Assert.Null(fetched!.UserId);
-        Assert.Null(fetched.PhotoUrl);
+        Assert.Null(fetched.PhotoStorageKey);
         Assert.Null(fetched.UpdatedAt);
     }
 
@@ -261,7 +261,7 @@ public class VehicleRepositoryTests : IAsyncLifetime
             licensePlate: "ORIG-1",
             color: "Red",
             mileage: 1000,
-            photoUrl: "orig.png",
+            photoStorageKey: "orig-key",
             boughtAt: new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         await _sut.CreateAsync(v);
 
@@ -271,7 +271,7 @@ public class VehicleRepositoryTests : IAsyncLifetime
             BoughtAt = null,
             Color = null,
             Mileage = 5000,
-            PhotoUrl = null,
+            PhotoStorageKey = null,
         };
         var updatedAt = new DateTime(2026, 6, 6, 6, 6, 6, DateTimeKind.Utc);
 
@@ -282,7 +282,7 @@ public class VehicleRepositoryTests : IAsyncLifetime
         Assert.Equal("NEW-1", fetched!.LicensePlate);
         Assert.Equal(5000, fetched.Mileage);
         Assert.Equal("Red", fetched.Color); // preserved via COALESCE
-        Assert.Equal("orig.png", fetched.PhotoUrl); // preserved
+        Assert.Equal("orig-key", fetched.PhotoStorageKey); // preserved
         Assert.Equal(v.BoughtAt, fetched.BoughtAt); // preserved
         Assert.Equal(updatedAt, fetched.UpdatedAt);
     }
@@ -296,7 +296,7 @@ public class VehicleRepositoryTests : IAsyncLifetime
             BoughtAt = null,
             Color = null,
             Mileage = null,
-            PhotoUrl = null,
+            PhotoStorageKey = null,
         };
         Assert.False(await _sut.UpdateAsync(Guid.NewGuid(), dto, DateTime.UtcNow));
     }

@@ -49,7 +49,7 @@ internal static class Factories
         int enginePower = 132,
         string color = "Red",
         int mileage = 12000,
-        string? photoUrl = "https://example.com/car.png",
+        string? photoStorageKey = "vehicles/photos/test/car",
         DateTime? createdAt = null,
         DateTime? updatedAt = null) => new()
         {
@@ -68,7 +68,7 @@ internal static class Factories
             EnginePower = enginePower,
             Color = color,
             Mileage = mileage,
-            PhotoUrl = photoUrl,
+            PhotoStorageKey = photoStorageKey,
             CreatedAt = createdAt ?? BaseUtc,
             UpdatedAt = updatedAt,
         };

@@ -29,5 +29,5 @@ public class VehicleEntity
     public required string Color { get; set; }
     public required TransmissionType TransmissionType { get; set; }
     public required int Mileage { get; set; }
-    public string? PhotoUrl { get; set; } = null;
+    public string? PhotoStorageKey { get; set; } = null;
 }

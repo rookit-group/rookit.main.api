@@ -31,7 +31,8 @@ namespace MainHub.Api.DTOs
     public required int Year { get; set; }
 
     /// <summary>
-    /// The photo URL of the vehicle.
+    /// Short-lived presigned URL for the vehicle's photo, or null if no photo
+    /// has been uploaded. Generated on read from the stored Minio object key.
     /// </summary>
     public string? PhotoUrl { get; set; } = null;
   }

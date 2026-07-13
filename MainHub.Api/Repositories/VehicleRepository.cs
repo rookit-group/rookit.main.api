@@ -27,7 +27,7 @@ public class VehicleRepository : IVehicleRepository
     private const string SelectColumns =
         "id, user_id, license_plate, vin, brand, model, year_created, bought_at, " +
         "wheel_drive_type, engine_capacity, fuel_type, transmission_type, engine_power, " +
-        "color, mileage, photo_url, created_at, updated_at";
+        "color, mileage, photo_storage_key, created_at, updated_at";
 
     private readonly NpgsqlDataSource _dataSource;
 
@@ -47,11 +47,11 @@ public class VehicleRepository : IVehicleRepository
             INSERT INTO vehicles (
                 id, user_id, license_plate, vin, brand, model, year_created, bought_at,
                 wheel_drive_type, engine_capacity, fuel_type, transmission_type, engine_power,
-                color, mileage, photo_url, created_at, updated_at
+                color, mileage, photo_storage_key, created_at, updated_at
             ) VALUES (
                 @id, @user_id, @license_plate, @vin, @brand, @model, @year_created, @bought_at,
                 @wheel_drive_type, @engine_capacity, @fuel_type, @transmission_type, @engine_power,
-                @color, @mileage, @photo_url, @created_at, @updated_at
+                @color, @mileage, @photo_storage_key, @created_at, @updated_at
             )";
 
         await using var cmd = _dataSource.CreateCommand(sql);
@@ -70,7 +70,7 @@ public class VehicleRepository : IVehicleRepository
         cmd.Parameters.AddWithValue("engine_power", vehicle.EnginePower);
         cmd.Parameters.AddWithValue("color", vehicle.Color);
         cmd.Parameters.AddWithValue("mileage", vehicle.Mileage);
-        cmd.Parameters.AddWithValue("photo_url", NpgsqlReaderExtensions.NullableParam(vehicle.PhotoUrl));
+        cmd.Parameters.AddWithValue("photo_storage_key", NpgsqlReaderExtensions.NullableParam(vehicle.PhotoStorageKey));
         cmd.Parameters.AddWithValue("created_at", vehicle.CreatedAt);
         cmd.Parameters.AddWithValue("updated_at", NpgsqlReaderExtensions.NullableParam(vehicle.UpdatedAt));
         await cmd.ExecuteNonQueryAsync();
@@ -204,12 +204,12 @@ public class VehicleRepository : IVehicleRepository
     {
         const string sql = @"
             UPDATE vehicles
-            SET license_plate = COALESCE(@license_plate, license_plate),
-                bought_at     = COALESCE(@bought_at,     bought_at),
-                color         = COALESCE(@color,         color),
-                mileage       = COALESCE(@mileage,       mileage),
-                photo_url     = COALESCE(@photo_url,     photo_url),
-                updated_at    = @updated_at
+            SET license_plate     = COALESCE(@license_plate,     license_plate),
+                bought_at         = COALESCE(@bought_at,         bought_at),
+                color             = COALESCE(@color,             color),
+                mileage           = COALESCE(@mileage,           mileage),
+                photo_storage_key = COALESCE(@photo_storage_key, photo_storage_key),
+                updated_at        = @updated_at
             WHERE id = @id";
 
         await using var cmd = _dataSource.CreateCommand(sql);
@@ -222,8 +222,8 @@ public class VehicleRepository : IVehicleRepository
         { Value = NpgsqlReaderExtensions.NullableParam(dto.Color) });
         cmd.Parameters.Add(new NpgsqlParameter("mileage", NpgsqlDbType.Integer)
         { Value = NpgsqlReaderExtensions.NullableParam(dto.Mileage) });
-        cmd.Parameters.Add(new NpgsqlParameter("photo_url", NpgsqlDbType.Text)
-        { Value = NpgsqlReaderExtensions.NullableParam(dto.PhotoUrl) });
+        cmd.Parameters.Add(new NpgsqlParameter("photo_storage_key", NpgsqlDbType.Text)
+        { Value = NpgsqlReaderExtensions.NullableParam(dto.PhotoStorageKey) });
         cmd.Parameters.AddWithValue("updated_at", updatedAt);
         var rows = await cmd.ExecuteNonQueryAsync();
         return rows > 0;
@@ -261,7 +261,7 @@ public class VehicleRepository : IVehicleRepository
         EnginePower = r.GetInt32(12),
         Color = r.GetString(13),
         Mileage = r.GetInt32(14),
-        PhotoUrl = r.GetNullableString(15),
+        PhotoStorageKey = r.GetNullableString(15),
         CreatedAt = r.GetFieldValue<DateTime>(16),
         UpdatedAt = r.GetNullableDateTime(17),
     };

@@ -59,6 +59,15 @@ public static partial class VehicleEndpoints
       .Produces(StatusCodes.Status201Created)
       .Produces<string>(StatusCodes.Status400BadRequest)
       .ProducesValidationProblem();
+
+    vehicles
+      .MapPost("/photo", UploadPhotoAsync)
+      .WithSummary("Upload a vehicle photo and receive its storage key")
+      .Accepts<IFormFile>("multipart/form-data")
+      // This API uses JWT bearer auth, so multipart uploads should not require a CSRF token.
+      .DisableAntiforgery()
+      .Produces<UploadVehiclePhotoResponseDto>(StatusCodes.Status200OK)
+      .Produces<string>(StatusCodes.Status400BadRequest);
   }
 
   internal static async Task<IResult> GetVehicleByIdAsync(
@@ -155,6 +164,38 @@ public static partial class VehicleEndpoints
 
       await vehicleService.CreateAsync(createVehicleDto, userId);
       return Results.StatusCode(StatusCodes.Status201Created);
+    }
+    catch (Exception ex)
+    {
+      return Results.BadRequest(ex.Message);
+    }
+  }
+
+  internal static async Task<IResult> UploadPhotoAsync(
+    IFormFile file,
+    ClaimsPrincipal userClaims,
+    IVehicleService vehicleService,
+    ITokenService tokenService,
+    ILogger<Program> logger
+  )
+  {
+    try
+    {
+      if (file is null || file.Length == 0)
+      {
+        return Results.BadRequest("Photo file is required.");
+      }
+
+      var contentType = string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType;
+      if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+      {
+        return Results.BadRequest("Uploaded file must be an image.");
+      }
+
+      var userId = tokenService.GetUserIdFromClaims(userClaims);
+      await using var stream = file.OpenReadStream();
+      var storageKey = await vehicleService.UploadPhotoAsync(stream, file.Length, contentType, userId);
+      return Results.Ok(new UploadVehiclePhotoResponseDto { StorageKey = storageKey });
     }
     catch (Exception ex)
     {

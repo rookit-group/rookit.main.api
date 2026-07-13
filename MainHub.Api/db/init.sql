@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
     engine_power      int         NOT NULL,
     color             text        NOT NULL,
     mileage           int         NOT NULL,
-    photo_url         text        NULL,
+    photo_storage_key text        NULL,
     created_at        timestamptz NOT NULL,
     updated_at        timestamptz NULL
 );
