@@ -389,6 +389,13 @@ public static class AuthEndpoints
       }, out var validated);
 
       var jwt = validated as JwtSecurityToken;
+
+      if (jwt == null)
+      {
+        Console.WriteLine("ValidateIdToken failed: Token is not a valid JWT.");
+        return null;
+      }
+
       return new TelegramUser(
           jwt.Subject,
           jwt.Claims.FirstOrDefault(c => c.Type == "name")?.Value,
