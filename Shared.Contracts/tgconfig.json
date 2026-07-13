@@ -1,0 +1,4 @@
+{
+  "generationSpecs": ["Shared.Contracts.Generator"],
+  "outputPath": "generated"
+}

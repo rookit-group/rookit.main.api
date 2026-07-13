@@ -1,0 +1,17 @@
+{
+  "name": "@rookit-group/shared-contracts",
+  "version": "0.0.0",
+  "description": "Shared TypeScript contracts generated from Rookit backend",
+  "types": "./index.ts",
+  "main": "./index.ts",
+  "files": [
+    "*.ts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rookit-group/rookit.main.api.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

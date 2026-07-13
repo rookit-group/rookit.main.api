@@ -262,3 +262,6 @@ __pycache__/
 .ai-instructions-cache/
 helm/rendered-*/
 rendered-*/
+
+# TypeGen generated TypeScript contracts (produced in CI)
+Shared.Contracts/generated/

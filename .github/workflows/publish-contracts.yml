@@ -1,0 +1,64 @@
+name: Publish Shared Contracts
+
+on:
+  push:
+    branches: [dev, main]
+    paths:
+      - 'Shared.Contracts/**'
+      - '.github/workflows/publish-contracts.yml'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dotnet tools
+        working-directory: Shared.Contracts
+        run: dotnet tool restore
+
+      - name: Build Shared.Contracts
+        working-directory: Shared.Contracts
+        run: dotnet build --configuration Release
+
+      - name: Generate TypeScript contracts
+        working-directory: Shared.Contracts
+        run: dotnet typegen generate
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@rookit-group'
+
+      - name: Copy package.json into generated
+        working-directory: Shared.Contracts
+        run: cp package.json generated/package.json
+
+      - name: Generate index.ts barrel
+        working-directory: Shared.Contracts/generated
+        run: |
+          rm -f index.ts
+          for f in *.ts; do
+            [ "$f" = "index.ts" ] && continue
+            echo "export * from './${f%.ts}';" >> index.ts
+          done
+          cat index.ts
+
+      - name: Set version from run number
+        working-directory: Shared.Contracts/generated
+        run: npm version "0.0.${{ github.run_number }}" --no-git-tag-version
+
+      - name: Publish
+        working-directory: Shared.Contracts/generated
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
