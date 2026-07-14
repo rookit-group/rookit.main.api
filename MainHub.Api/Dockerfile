@@ -6,10 +6,13 @@ EXPOSE 5001
 # Use the official .NET 9.0 SDK for building
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
-COPY ["MainHub.Api.csproj", "./"]
-RUN dotnet restore "MainHub.Api.csproj"
+# Copy project files first to leverage Docker layer caching on restore.
+# Build context is the solution root, so referenced projects are available.
+COPY ["MainHub.Api/MainHub.Api.csproj", "MainHub.Api/"]
+COPY ["Shared.Contracts/Shared.Contracts.csproj", "Shared.Contracts/"]
+RUN dotnet restore "MainHub.Api/MainHub.Api.csproj"
 COPY . .
-WORKDIR "/src/."
+WORKDIR "/src/MainHub.Api"
 RUN dotnet build "MainHub.Api.csproj" -c Release -o /app/build
 
 # Publish the application

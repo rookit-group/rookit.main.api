@@ -32,8 +32,8 @@ services:
 
   mainhub-api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: MainHub.Api/Dockerfile
     restart: unless-stopped
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
