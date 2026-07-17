@@ -6,6 +6,25 @@ on:
     # tags: ["v*"]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore MainHub.Api.sln
+
+      - name: Build
+        run: dotnet build MainHub.Api.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test MainHub.Api.IntegrationTests/MainHub.Api.IntegrationTests.csproj --configuration Release --no-build --verbosity normal
+        
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
