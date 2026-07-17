@@ -14,6 +14,8 @@ using Microsoft.AspNetCore.Authorization;
 using Npgsql;
 using MainHub.Api.Enums;
 using Minio;
+using DbUp;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,23 +45,28 @@ builder.Services.Configure<MinioSettings>(
     builder.Configuration.GetSection("MinioSettings")
 );
 
-// 🟦 Register PostgreSQL data source as a singleton (built-in connection pooling)
-// This replaces the old IMongoClient singleton registration and the
-// BsonSerializer.RegisterSerializer(...) call that used to configure BSON
-// mapping - Npgsql needs no such global serializer setup. Connection info now
-// comes from the standard ASP.NET "ConnectionStrings:Main" config key instead
-// of a custom MongoDbSettings section (host/port/db were previously separate
-// settings; here they're all part of one Postgres connection string).
-// NpgsqlDataSourceBuilder(...).Build() creates the pooled data source itself;
-// repositories call _dataSource.CreateCommand(...) per operation and Npgsql
-// borrows/returns a physical connection from the pool automatically - there's
-// no manual "open a connection, remember to close it" step to manage.
+// 🟦 Register PostgreSQL
 var connectionString = builder.Configuration.GetConnectionString("Main");
 if (string.IsNullOrEmpty(connectionString))
 {
     throw new InvalidOperationException("ConnectionStrings:Main is not configured properly.");
 }
-builder.Services.AddSingleton(new NpgsqlDataSourceBuilder(connectionString).Build());
+// if the mainhub database doesn't exist yet on the Postgres server, create it. Safe to run when it already exists.
+EnsureDatabase.For.PostgresqlDatabase(connectionString);
+// configures DbUp to look for SQL scripts embedded in the running assembly (i.e. the .dll).
+var upgrader = DeployChanges.To
+    .PostgresqlDatabase(connectionString)
+    .WithScriptsEmbeddedInAssembly(Assembly.GetExecutingAssembly())
+    .LogToConsole()
+    .Build();
+// connects, checks the schemaversions table (creates it if missing), runs any scripts not yet applied.
+var result = upgrader.PerformUpgrade();
+// If anything fails, print the error and exit the process — no point letting the app run against a broken schema.
+if (!result.Successful)
+{
+    Console.Error.WriteLine(result.Error);
+    Environment.Exit(1);
+}
 
 // 🟦 Register Minio client as a singleton. The client is thread-safe and holds
 // an HttpClient internally, so a single instance is reused across requests.

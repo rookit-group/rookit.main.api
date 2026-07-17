@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Arex388.NhtsaVpic.Extensions.Microsoft.DependencyInjection" Version="1.1.2" />
     <PackageReference Include="AspNetCore.SwaggerUI.Themes" Version="3.0.1" />
+    <PackageReference Include="dbup-postgresql" Version="7.0.1" />
     <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
     <PackageReference Include="Minio" Version="7.0.0" />
@@ -18,6 +19,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Shared.Contracts\Shared.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\*.sql" />
   </ItemGroup>
 
 </Project>
