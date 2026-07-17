@@ -67,6 +67,11 @@ if (!result.Successful)
     Console.Error.WriteLine(result.Error);
     Environment.Exit(1);
 }
+// Register a single NpgsqlDataSource for the app. Repositories inject this
+// and open short-lived connections from it. Singleton because the data
+// source is thread-safe and owns the connection pool.
+builder.Services.AddSingleton<NpgsqlDataSource>(_ =>
+    new NpgsqlDataSourceBuilder(connectionString).Build());
 
 // 🟦 Register Minio client as a singleton. The client is thread-safe and holds
 // an HttpClient internally, so a single instance is reused across requests.
