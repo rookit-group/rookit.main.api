@@ -1,10 +1,10 @@
-# Use the official .NET 9.0 runtime as the base image
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+# Use the official .NET 10.0 runtime as the base image
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 EXPOSE 5001
 
-# Use the official .NET 9.0 SDK for building
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+# Use the official .NET 10.0 SDK for building
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 # Copy project files first to leverage Docker layer caching on restore.
 # Build context is the solution root, so referenced projects are available.
