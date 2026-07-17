@@ -1,3 +1,5 @@
+using DbUp;
+using MainHub.Api.Models;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -25,15 +27,25 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         await _container.StartAsync();
 
-        DataSource = new NpgsqlDataSourceBuilder(_container.GetConnectionString()).Build();
+        var connectionString = _container.GetConnectionString();
+        DataSource = new NpgsqlDataSourceBuilder(connectionString).Build();
 
-        // Run the same init.sql the docker-compose postgres container runs on
-        // first start - copied into the test output via <Content Include=...>.
-        var initSqlPath = Path.Combine(AppContext.BaseDirectory, "db", "init.sql");
-        var initSql = await File.ReadAllTextAsync(initSqlPath);
+        // Apply the same DbUp migrations the production API runs at startup,
+        // reading from Migrations/*.sql embedded in the MainHub.Api assembly.
+        // typeof(UserEntity) is just a handle to that assembly - any type in
+        // MainHub.Api would do. Reusing the exact same code path guarantees
+        // tests exercise the schema that actually ships.
+        var upgrader = DeployChanges.To
+            .PostgresqlDatabase(connectionString)
+            .WithScriptsEmbeddedInAssembly(typeof(UserEntity).Assembly)
+            .LogToConsole()
+            .Build();
 
-        await using var cmd = DataSource.CreateCommand(initSql);
-        await cmd.ExecuteNonQueryAsync();
+        var result = upgrader.PerformUpgrade();
+        if (!result.Successful)
+        {
+            throw new InvalidOperationException("Test schema setup failed", result.Error);
+        }
     }
 
     public async Task DisposeAsync()
@@ -43,8 +55,9 @@ public sealed class PostgresFixture : IAsyncLifetime
     }
 
     // Called at the start of each test to give it a clean slate. CASCADE is
-    // needed because of the FK relationships in init.sql - truncating users
-    // without CASCADE would fail while there are refresh_tokens/vehicles rows.
+    // needed because of the FK relationships - truncating users without
+    // CASCADE would fail while there are refresh_tokens/vehicles rows.
+    // schemaversions is intentionally excluded so DbUp doesn't re-run scripts.
     public async Task ResetAsync()
     {
         const string sql = @"

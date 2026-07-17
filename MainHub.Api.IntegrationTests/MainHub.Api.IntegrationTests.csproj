@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="dbup-postgresql" Version="5.0.87" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="Npgsql" Version="8.0.5" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
@@ -25,13 +26,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Shared.Contracts\Shared.Contracts.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="..\MainHub.Api\db\init.sql">
-      <Link>db\init.sql</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 
 </Project>
