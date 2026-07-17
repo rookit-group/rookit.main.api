@@ -26,7 +26,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/rookit-group/main.api
+          images: ghcr.io/rookit-group/mainhub-api
           tags: |
             type=ref,event=branch
             type=sha,prefix=sha-
