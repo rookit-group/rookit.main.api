@@ -26,6 +26,7 @@ jobs:
         run: dotnet test MainHub.Api.IntegrationTests/MainHub.Api.IntegrationTests.csproj --configuration Release --no-build --verbosity normal
         
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
