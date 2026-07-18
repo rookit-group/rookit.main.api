@@ -9,10 +9,10 @@ public class VehicleEntity
 {
     public required Guid Id { get; set; }
 
-    // FK to internal_user_profiles.id (see db/init.sql). Every vehicle must
-    // belong to exactly one internal profile - unlike the old user_id column
-    // this is NOT NULL, so there is no "unattached" state.
-    public required Guid InternalUserProfileId { get; set; }
+    // FK to external_user_profiles.id (see 001_initial.sql). Every vehicle
+    // must belong to exactly one external profile - this is NOT NULL, so
+    // there is no "unattached" state.
+    public required Guid ExternalUserProfileId { get; set; }
     public required string LicensePlate { get; set; }
     public required string Vin { get; set; }
     public required string Brand { get; set; }

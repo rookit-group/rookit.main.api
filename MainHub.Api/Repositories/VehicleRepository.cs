@@ -24,7 +24,7 @@ public interface IVehicleRepository
 public class VehicleRepository : IVehicleRepository
 {
     private const string SelectColumns =
-        "v.id, v.internal_user_profile_id, v.license_plate, v.vin, v.brand, v.model, v.year_created, v.bought_at, " +
+        "v.id, v.external_user_profile_id, v.license_plate, v.vin, v.brand, v.model, v.year_created, v.bought_at, " +
         "v.wheel_drive_type, v.engine_capacity, v.fuel_type, v.transmission_type, v.engine_power, " +
         "v.color, v.mileage, v.photo_storage_keys, v.created_at, v.updated_at";
 
@@ -39,18 +39,18 @@ public class VehicleRepository : IVehicleRepository
     {
         const string sql = @"
             INSERT INTO vehicles (
-                id, internal_user_profile_id, license_plate, vin, brand, model, year_created, bought_at,
+                id, external_user_profile_id, license_plate, vin, brand, model, year_created, bought_at,
                 wheel_drive_type, engine_capacity, fuel_type, transmission_type, engine_power,
                 color, mileage, photo_storage_keys, created_at, updated_at
             ) VALUES (
-                @id, @internal_user_profile_id, @license_plate, @vin, @brand, @model, @year_created, @bought_at,
+                @id, @external_user_profile_id, @license_plate, @vin, @brand, @model, @year_created, @bought_at,
                 @wheel_drive_type, @engine_capacity, @fuel_type, @transmission_type, @engine_power,
                 @color, @mileage, @photo_storage_keys, @created_at, @updated_at
             )";
 
         await using var cmd = _dataSource.CreateCommand(sql);
         cmd.Parameters.AddWithValue("id", vehicle.Id);
-        cmd.Parameters.AddWithValue("internal_user_profile_id", vehicle.InternalUserProfileId);
+        cmd.Parameters.AddWithValue("external_user_profile_id", vehicle.ExternalUserProfileId);
         cmd.Parameters.AddWithValue("license_plate", vehicle.LicensePlate);
         cmd.Parameters.AddWithValue("vin", vehicle.Vin);
         cmd.Parameters.AddWithValue("brand", vehicle.Brand);
@@ -109,14 +109,14 @@ public class VehicleRepository : IVehicleRepository
         return Convert.ToInt64(await cmd.ExecuteScalarAsync());
     }
 
-    // Ownership lives on internal_user_profiles now, not directly on vehicles,
+    // Ownership lives on external_user_profiles now, not directly on vehicles,
     // so "give me all vehicles for this user" is a JOIN through the profile
     // table rather than a direct WHERE user_id = ... .
     public async Task<List<VehicleEntity>> GetAllByUserAsync(Guid userId)
     {
         await using var cmd = _dataSource.CreateCommand(
             $@"SELECT {SelectColumns} FROM vehicles v
-               JOIN internal_user_profiles p ON v.internal_user_profile_id = p.id
+               JOIN external_user_profiles p ON v.external_user_profile_id = p.id
                WHERE p.user_id = @user_id");
         cmd.Parameters.AddWithValue("user_id", userId);
         return await ReadListAsync(cmd);
@@ -126,7 +126,7 @@ public class VehicleRepository : IVehicleRepository
     {
         await using var cmd = _dataSource.CreateCommand(
             @"SELECT 1 FROM vehicles v
-              JOIN internal_user_profiles p ON v.internal_user_profile_id = p.id
+              JOIN external_user_profiles p ON v.external_user_profile_id = p.id
               WHERE v.id = @id AND p.user_id = @user_id");
         cmd.Parameters.AddWithValue("id", vehicleId);
         cmd.Parameters.AddWithValue("user_id", userId);
@@ -134,7 +134,7 @@ public class VehicleRepository : IVehicleRepository
         return result is not null;
     }
 
-    // Returns vehicleId -> owner user_id (not internal_user_profile_id) so
+    // Returns vehicleId -> owner user_id (not external_user_profile_id) so
     // callers keep working with the user identity that JWT claims carry.
     public async Task<Dictionary<Guid, Guid>> GetOwnerMapAsync(IReadOnlyCollection<Guid> vehicleIds)
     {
@@ -143,7 +143,7 @@ public class VehicleRepository : IVehicleRepository
 
         await using var cmd = _dataSource.CreateCommand(
             @"SELECT v.id, p.user_id FROM vehicles v
-              JOIN internal_user_profiles p ON v.internal_user_profile_id = p.id
+              JOIN external_user_profiles p ON v.external_user_profile_id = p.id
               WHERE v.id = ANY(@ids)");
         cmd.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = vehicleIds.ToArray() });
         await using var reader = await cmd.ExecuteReaderAsync();
@@ -197,7 +197,7 @@ public class VehicleRepository : IVehicleRepository
     private static VehicleEntity Map(NpgsqlDataReader r) => new()
     {
         Id = r.GetGuid(0),
-        InternalUserProfileId = r.GetGuid(1),
+        ExternalUserProfileId = r.GetGuid(1),
         LicensePlate = r.GetString(2),
         Vin = r.GetString(3),
         Brand = r.GetString(4),

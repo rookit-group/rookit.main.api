@@ -8,6 +8,7 @@ public interface IExternalUserProfileRepository
 {
     Task CreateAsync(ExternalUserProfileEntity profile);
     Task<ExternalUserProfileEntity?> GetByUserIdAsync(Guid userId);
+    Task<Guid?> GetIdByUserIdAsync(Guid userId);
 }
 
 public class ExternalUserProfileRepository : IExternalUserProfileRepository
@@ -42,6 +43,15 @@ public class ExternalUserProfileRepository : IExternalUserProfileRepository
         cmd.Parameters.AddWithValue("user_id", userId);
         await using var reader = await cmd.ExecuteReaderAsync();
         return await reader.ReadAsync() ? Map(reader) : null;
+    }
+
+    public async Task<Guid?> GetIdByUserIdAsync(Guid userId)
+    {
+        await using var cmd = _dataSource.CreateCommand(
+            "SELECT id FROM external_user_profiles WHERE user_id = @user_id");
+        cmd.Parameters.AddWithValue("user_id", userId);
+        var result = await cmd.ExecuteScalarAsync();
+        return result is Guid id ? id : null;
     }
 
     private static ExternalUserProfileEntity Map(NpgsqlDataReader r) => new()

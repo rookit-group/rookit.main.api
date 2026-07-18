@@ -33,7 +33,7 @@ internal static class Factories
             UpdatedAt = updatedAt,
         };
 
-    public static InternalUserProfileEntity InternalUserProfile(
+    public static ExternalUserProfileEntity ExternalUserProfile(
         Guid userId,
         Guid? id = null,
         DateTime? createdAt = null,
@@ -46,7 +46,7 @@ internal static class Factories
         };
 
     public static VehicleEntity Vehicle(
-        Guid internalUserProfileId,
+        Guid externalUserProfileId,
         Guid? id = null,
         string licensePlate = "AA-123-BB",
         string vin = "1HGBH41JXMN109186",
@@ -66,7 +66,7 @@ internal static class Factories
         DateTime? updatedAt = null) => new()
         {
             Id = id ?? Guid.NewGuid(),
-            InternalUserProfileId = internalUserProfileId,
+            ExternalUserProfileId = externalUserProfileId,
             LicensePlate = licensePlate,
             Vin = vin,
             Brand = brand,

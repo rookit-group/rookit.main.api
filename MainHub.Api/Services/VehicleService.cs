@@ -23,14 +23,14 @@ public interface IVehicleService
 public class VehicleService(
   IVehicleRepository repository,
   IUserService userService,
-  IInternalUserProfileRepository internalUserProfileRepository,
+  IExternalUserProfileRepository externalUserProfileRepository,
   IServiceHistoryService serviceHistoryService,
   IMinioService minioService
 ) : IVehicleService
 {
     private readonly IVehicleRepository _repository = repository;
     private readonly IUserService _userService = userService;
-    private readonly IInternalUserProfileRepository _internalUserProfileRepository = internalUserProfileRepository;
+    private readonly IExternalUserProfileRepository _externalUserProfileRepository = externalUserProfileRepository;
     private readonly IServiceHistoryService _serviceHistoryService = serviceHistoryService;
     private readonly IMinioService _minioService = minioService;
 
@@ -124,17 +124,17 @@ public class VehicleService(
             await ValidatePhotoStorageKeysAsync(createVehicleDto.PhotoStorageKeys, userId);
         }
 
-        // vehicles.internal_user_profile_id FKs against internal_user_profiles.id,
+        // vehicles.external_user_profile_id FKs against external_user_profiles.id,
         // not users.id. The service layer still deals in userId (from the JWT
-        // claim), so we resolve to the caller's internal profile id here before
+        // claim), so we resolve to the caller's external profile id here before
         // handing the entity to the repository.
-        var internalUserProfileId = await _internalUserProfileRepository.GetIdByUserIdAsync(userId)
-            ?? throw new InvalidOperationException($"Internal user profile not found for user {userId}.");
+        var externalUserProfileId = await _externalUserProfileRepository.GetIdByUserIdAsync(userId)
+            ?? throw new InvalidOperationException($"External user profile not found for user {userId}.");
 
         var vehicle = new VehicleEntity
         {
             Id = Guid.NewGuid(),
-            InternalUserProfileId = internalUserProfileId,
+            ExternalUserProfileId = externalUserProfileId,
             Vin = createVehicleDto.Vin,
             Model = createVehicleDto.Model,
             UpdatedAt = null,

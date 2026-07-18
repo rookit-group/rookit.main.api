@@ -51,13 +51,13 @@ CREATE TABLE IF NOT EXISTS internal_user_profiles (
 );
 
 -- VEHICLES TABLE: Stores vehicle/car information
--- Relationship: MANY vehicles belong to ONE internal user profile (MANY-TO-ONE with internal_user_profiles table)
+-- Relationship: MANY vehicles belong to ONE external user profile (MANY-TO-ONE with external_user_profiles table)
 -- Relationship: ONE vehicle has MANY service histories (ONE-TO-MANY)
 CREATE TABLE IF NOT EXISTS vehicles (
     -- Unique identifier for this vehicle
     id                uuid        PRIMARY KEY,
-    -- Link to the internal user profile who owns this vehicle (FK to internal_user_profiles table) - required, deletes vehicle if internal user profile deleted
-    internal_user_profile_id         uuid        NOT NULL REFERENCES internal_user_profiles(id) ON DELETE CASCADE,
+    -- Link to the external user profile who owns this vehicle (FK to external_user_profiles table) - required, deletes vehicle if external user profile deleted
+    external_user_profile_id         uuid        NOT NULL REFERENCES external_user_profiles(id) ON DELETE CASCADE,
     -- Vehicle license plate number (required)
     license_plate     text        NOT NULL,
     -- Vehicle Identification Number - unique identifier assigned by manufacturer (required)
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
 );
 
 -- INDEX: Speeds up queries that find all vehicles for a specific user
-CREATE INDEX IF NOT EXISTS ix_vehicles_internal_user_profile_id ON vehicles(internal_user_profile_id);
+CREATE INDEX IF NOT EXISTS ix_vehicles_external_user_profile_id ON vehicles(external_user_profile_id);
 
 -- SERVICE_HISTORIES TABLE: Stores vehicle service history/maintenance records
 -- Relationship: MANY service histories belong to ONE vehicle (MANY-TO-ONE with vehicles table)
