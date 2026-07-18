@@ -9,11 +9,10 @@ public class VehicleEntity
 {
     public required Guid Id { get; set; }
 
-    // Replaces the old UserEntity.VehicleIds array. Ownership is now a
-    // foreign key living on the "many" side (a vehicle points at one owner),
-    // matching the vehicles.user_id column in db/init.sql. Null means
-    // unowned/unattached, same idea as an unset field in Mongo.
-    public Guid? UserId { get; set; }
+    // FK to internal_user_profiles.id (see db/init.sql). Every vehicle must
+    // belong to exactly one internal profile - unlike the old user_id column
+    // this is NOT NULL, so there is no "unattached" state.
+    public required Guid InternalUserProfileId { get; set; }
     public required string LicensePlate { get; set; }
     public required string Vin { get; set; }
     public required string Brand { get; set; }

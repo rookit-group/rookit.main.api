@@ -11,6 +11,7 @@ public class ServiceHistoryRepositoryTests : IAsyncLifetime
     private readonly ServiceHistoryRepository _sut;
     private readonly VehicleRepository _vehicles;
     private readonly UserRepository _users;
+    private readonly InternalUserProfileRepository _profiles;
 
     public ServiceHistoryRepositoryTests(PostgresFixture fixture)
     {
@@ -18,23 +19,22 @@ public class ServiceHistoryRepositoryTests : IAsyncLifetime
         _sut = new ServiceHistoryRepository(fixture.DataSource);
         _vehicles = new VehicleRepository(fixture.DataSource);
         _users = new UserRepository(fixture.DataSource);
+        _profiles = new InternalUserProfileRepository(fixture.DataSource);
     }
 
     public Task InitializeAsync() => _fixture.ResetAsync();
     public Task DisposeAsync() => Task.CompletedTask;
 
     // vehicle_id is a NOT NULL FK on service_histories - every service history
-    // in these tests needs a real vehicle row already present.
-    private async Task<Guid> CreateVehicleAsync(Guid? userId = null)
+    // in these tests needs a real vehicle row, which in turn needs a user +
+    // internal profile pair upstream.
+    private async Task<Guid> CreateVehicleAsync()
     {
-        Guid? attachedUser = userId;
-        if (attachedUser is null)
-        {
-            var user = Factories.User();
-            await _users.CreateAsync(user);
-            attachedUser = user.Id;
-        }
-        var vehicle = Factories.Vehicle(userId: attachedUser);
+        var user = Factories.User();
+        await _users.CreateAsync(user);
+        var profile = Factories.InternalUserProfile(user.Id);
+        await _profiles.CreateAsync(profile);
+        var vehicle = Factories.Vehicle(internalUserProfileId: profile.Id);
         await _vehicles.CreateAsync(vehicle);
         return vehicle.Id;
     }

@@ -92,6 +92,8 @@ builder.Services.AddSingleton<IMinioClient>(_ =>
 
 // 🟦 Register application services 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IInternalUserProfileRepository, InternalUserProfileRepository>();
+builder.Services.AddScoped<IExternalUserProfileRepository, ExternalUserProfileRepository>();
 builder.Services.AddScoped<IVehicleRepository, VehicleRepository>();
 builder.Services.AddScoped<IServiceHistoryRepository, ServiceHistoryRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();

@@ -12,27 +12,40 @@ public class VehicleRepositoryTests : IAsyncLifetime
     private readonly PostgresFixture _fixture;
     private readonly VehicleRepository _sut;
     private readonly UserRepository _users;
+    private readonly InternalUserProfileRepository _profiles;
 
     public VehicleRepositoryTests(PostgresFixture fixture)
     {
         _fixture = fixture;
         _sut = new VehicleRepository(fixture.DataSource);
         _users = new UserRepository(fixture.DataSource);
+        _profiles = new InternalUserProfileRepository(fixture.DataSource);
     }
 
     public Task InitializeAsync() => _fixture.ResetAsync();
     public Task DisposeAsync() => Task.CompletedTask;
+
+    // vehicles.internal_user_profile_id is NOT NULL and FKs against
+    // internal_user_profiles, so every vehicle in these tests needs a user +
+    // profile pair already inserted.
+    private async Task<(Guid userId, Guid profileId)> CreateUserAndProfileAsync(string? providerId = null)
+    {
+        var user = Factories.User(providerId: providerId);
+        await _users.CreateAsync(user);
+        var profile = Factories.InternalUserProfile(user.Id);
+        await _profiles.CreateAsync(profile);
+        return (user.Id, profile.Id);
+    }
 
     // Also exercises enum-as-text round-tripping via WheelDriveType / FuelType /
     // TransmissionType and every nullable column - this is the single Map test.
     [Fact]
     public async Task Create_then_GetById_roundtrips_every_column_including_enums()
     {
-        var user = Factories.User();
-        await _users.CreateAsync(user);
+        var (_, profileId) = await CreateUserAndProfileAsync();
 
         var vehicle = Factories.Vehicle(
-            userId: user.Id,
+            internalUserProfileId: profileId,
             licensePlate: "XY-999-ZZ",
             vin: "5NPE24AF4FH123456",
             brand: "Hyundai",
@@ -54,7 +67,7 @@ public class VehicleRepositoryTests : IAsyncLifetime
 
         Assert.NotNull(fetched);
         Assert.Equal(vehicle.Id, fetched!.Id);
-        Assert.Equal(user.Id, fetched.UserId);
+        Assert.Equal(profileId, fetched.InternalUserProfileId);
         Assert.Equal(vehicle.LicensePlate, fetched.LicensePlate);
         Assert.Equal(vehicle.Vin, fetched.Vin);
         Assert.Equal(vehicle.Brand, fetched.Brand);
@@ -74,14 +87,14 @@ public class VehicleRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Create_persists_null_user_id_and_null_photo_storage_keys()
+    public async Task Create_persists_null_photo_storage_keys_and_null_updated_at()
     {
-        var vehicle = Factories.Vehicle(userId: null, photoStorageKeys: null, updatedAt: null);
+        var (_, profileId) = await CreateUserAndProfileAsync();
+        var vehicle = Factories.Vehicle(internalUserProfileId: profileId, photoStorageKeys: null, updatedAt: null);
         await _sut.CreateAsync(vehicle);
         var fetched = await _sut.GetByIdAsync(vehicle.Id);
         Assert.NotNull(fetched);
-        Assert.Null(fetched!.UserId);
-        Assert.Null(fetched.PhotoStorageKeys);
+        Assert.Null(fetched!.PhotoStorageKeys);
         Assert.Null(fetched.UpdatedAt);
     }
 
@@ -95,9 +108,10 @@ public class VehicleRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task GetByIds_returns_only_matching_ids()
     {
-        var a = Factories.Vehicle(licensePlate: "A");
-        var b = Factories.Vehicle(licensePlate: "B");
-        var c = Factories.Vehicle(licensePlate: "C");
+        var (_, profileId) = await CreateUserAndProfileAsync();
+        var a = Factories.Vehicle(internalUserProfileId: profileId, licensePlate: "A");
+        var b = Factories.Vehicle(internalUserProfileId: profileId, licensePlate: "B");
+        var c = Factories.Vehicle(internalUserProfileId: profileId, licensePlate: "C");
         await _sut.CreateAsync(a);
         await _sut.CreateAsync(b);
         await _sut.CreateAsync(c);
@@ -118,7 +132,8 @@ public class VehicleRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task Delete_removes_vehicle()
     {
-        var v = Factories.Vehicle();
+        var (_, profileId) = await CreateUserAndProfileAsync();
+        var v = Factories.Vehicle(internalUserProfileId: profileId);
         await _sut.CreateAsync(v);
         await _sut.DeleteAsync(v.Id);
         Assert.Null(await _sut.GetByIdAsync(v.Id));
@@ -128,11 +143,12 @@ public class VehicleRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task GetAllVehicles_orders_by_created_at_desc_and_pages()
     {
+        var (_, profileId) = await CreateUserAndProfileAsync();
         var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var v1 = Factories.Vehicle(licensePlate: "v1", createdAt: t0);
-        var v2 = Factories.Vehicle(licensePlate: "v2", createdAt: t0.AddHours(1));
-        var v3 = Factories.Vehicle(licensePlate: "v3", createdAt: t0.AddHours(2));
-        var v4 = Factories.Vehicle(licensePlate: "v4", createdAt: t0.AddHours(3));
+        var v1 = Factories.Vehicle(internalUserProfileId: profileId, licensePlate: "v1", createdAt: t0);
+        var v2 = Factories.Vehicle(internalUserProfileId: profileId, licensePlate: "v2", createdAt: t0.AddHours(1));
+        var v3 = Factories.Vehicle(internalUserProfileId: profileId, licensePlate: "v3", createdAt: t0.AddHours(2));
+        var v4 = Factories.Vehicle(internalUserProfileId: profileId, licensePlate: "v4", createdAt: t0.AddHours(3));
         await _sut.CreateAsync(v1);
         await _sut.CreateAsync(v2);
         await _sut.CreateAsync(v3);
@@ -149,60 +165,53 @@ public class VehicleRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task GetCount_returns_total_rows()
     {
+        var (_, profileId) = await CreateUserAndProfileAsync();
         Assert.Equal(0, await _sut.GetCountAsync());
-        await _sut.CreateAsync(Factories.Vehicle());
-        await _sut.CreateAsync(Factories.Vehicle());
+        await _sut.CreateAsync(Factories.Vehicle(internalUserProfileId: profileId));
+        await _sut.CreateAsync(Factories.Vehicle(internalUserProfileId: profileId));
         Assert.Equal(2, await _sut.GetCountAsync());
     }
 
     [Fact]
     public async Task GetAllByUser_returns_only_that_users_vehicles()
     {
-        var u1 = Factories.User(providerId: "u1");
-        var u2 = Factories.User(providerId: "u2");
-        await _users.CreateAsync(u1);
-        await _users.CreateAsync(u2);
+        var (u1Id, p1) = await CreateUserAndProfileAsync(providerId: "u1");
+        var (_, p2) = await CreateUserAndProfileAsync(providerId: "u2");
 
-        await _sut.CreateAsync(Factories.Vehicle(userId: u1.Id, licensePlate: "u1a"));
-        await _sut.CreateAsync(Factories.Vehicle(userId: u1.Id, licensePlate: "u1b"));
-        await _sut.CreateAsync(Factories.Vehicle(userId: u2.Id, licensePlate: "u2a"));
-        await _sut.CreateAsync(Factories.Vehicle(userId: null, licensePlate: "orphan"));
+        await _sut.CreateAsync(Factories.Vehicle(internalUserProfileId: p1, licensePlate: "u1a"));
+        await _sut.CreateAsync(Factories.Vehicle(internalUserProfileId: p1, licensePlate: "u1b"));
+        await _sut.CreateAsync(Factories.Vehicle(internalUserProfileId: p2, licensePlate: "u2a"));
 
-        var forU1 = await _sut.GetAllByUserAsync(u1.Id);
+        var forU1 = await _sut.GetAllByUserAsync(u1Id);
 
         Assert.Equal(2, forU1.Count);
-        Assert.All(forU1, v => Assert.Equal(u1.Id, v.UserId));
+        Assert.All(forU1, v => Assert.Equal(p1, v.InternalUserProfileId));
     }
 
     [Fact]
     public async Task BelongsToUser_true_when_owned_and_false_otherwise()
     {
-        var user = Factories.User();
-        var other = Factories.User(providerId: "other");
-        await _users.CreateAsync(user);
-        await _users.CreateAsync(other);
-        var v = Factories.Vehicle(userId: user.Id);
+        var (userId, profileId) = await CreateUserAndProfileAsync();
+        var (otherId, _) = await CreateUserAndProfileAsync(providerId: "other");
+        var v = Factories.Vehicle(internalUserProfileId: profileId);
         await _sut.CreateAsync(v);
 
-        Assert.True(await _sut.BelongsToUserAsync(v.Id, user.Id));
-        Assert.False(await _sut.BelongsToUserAsync(v.Id, other.Id));
-        Assert.False(await _sut.BelongsToUserAsync(Guid.NewGuid(), user.Id));
+        Assert.True(await _sut.BelongsToUserAsync(v.Id, userId));
+        Assert.False(await _sut.BelongsToUserAsync(v.Id, otherId));
+        Assert.False(await _sut.BelongsToUserAsync(Guid.NewGuid(), userId));
     }
 
     [Fact]
     public async Task GetOwnerMap_returns_id_to_userId_for_owned_vehicles()
     {
-        var u = Factories.User();
-        await _users.CreateAsync(u);
-        var owned = Factories.Vehicle(userId: u.Id);
-        var orphan = Factories.Vehicle(userId: null);
+        var (userId, profileId) = await CreateUserAndProfileAsync();
+        var owned = Factories.Vehicle(internalUserProfileId: profileId);
         await _sut.CreateAsync(owned);
-        await _sut.CreateAsync(orphan);
 
-        var map = await _sut.GetOwnerMapAsync([owned.Id, orphan.Id, Guid.NewGuid()]);
+        var map = await _sut.GetOwnerMapAsync([owned.Id, Guid.NewGuid()]);
 
         Assert.Single(map);
-        Assert.Equal(u.Id, map[owned.Id]);
+        Assert.Equal(userId, map[owned.Id]);
     }
 
     [Fact]
@@ -212,53 +221,13 @@ public class VehicleRepositoryTests : IAsyncLifetime
         Assert.Empty(map);
     }
 
-    [Fact]
-    public async Task Attach_sets_user_id()
-    {
-        var user = Factories.User();
-        await _users.CreateAsync(user);
-        var v = Factories.Vehicle(userId: null);
-        await _sut.CreateAsync(v);
-
-        var attached = await _sut.AttachAsync(v.Id, user.Id);
-
-        Assert.True(attached);
-        var fetched = await _sut.GetByIdAsync(v.Id);
-        Assert.Equal(user.Id, fetched!.UserId);
-    }
-
-    [Fact]
-    public async Task Attach_returns_false_when_vehicle_missing()
-    {
-        var user = Factories.User();
-        await _users.CreateAsync(user);
-        Assert.False(await _sut.AttachAsync(Guid.NewGuid(), user.Id));
-    }
-
-    [Fact]
-    public async Task Detach_nulls_user_id_only_for_matching_owner()
-    {
-        var owner = Factories.User(providerId: "o");
-        var stranger = Factories.User(providerId: "s");
-        await _users.CreateAsync(owner);
-        await _users.CreateAsync(stranger);
-        var v = Factories.Vehicle(userId: owner.Id);
-        await _sut.CreateAsync(v);
-
-        // Wrong owner -> false, user_id unchanged.
-        Assert.False(await _sut.DetachAsync(v.Id, stranger.Id));
-        Assert.Equal(owner.Id, (await _sut.GetByIdAsync(v.Id))!.UserId);
-
-        // Right owner -> true, user_id nulled.
-        Assert.True(await _sut.DetachAsync(v.Id, owner.Id));
-        Assert.Null((await _sut.GetByIdAsync(v.Id))!.UserId);
-    }
-
     // COALESCE partial update: only supplied fields change, others preserved.
     [Fact]
     public async Task Update_partial_only_touches_supplied_columns()
     {
+        var (_, profileId) = await CreateUserAndProfileAsync();
         var v = Factories.Vehicle(
+            internalUserProfileId: profileId,
             licensePlate: "ORIG-1",
             color: "Red",
             mileage: 1000,
@@ -302,19 +271,17 @@ public class VehicleRepositoryTests : IAsyncLifetime
         Assert.False(await _sut.UpdateAsync(Guid.NewGuid(), dto, DateTime.UtcNow));
     }
 
-    // FK ON DELETE SET NULL: deleting the user nulls the vehicle's user_id.
+    // FK ON DELETE CASCADE now: deleting the user removes their profile which
+    // in turn CASCADEs to their vehicles.
     [Fact]
-    public async Task Deleting_user_nulls_vehicle_user_id_via_cascade()
+    public async Task Deleting_user_cascades_vehicle_deletion()
     {
-        var user = Factories.User();
-        await _users.CreateAsync(user);
-        var v = Factories.Vehicle(userId: user.Id);
+        var (userId, profileId) = await CreateUserAndProfileAsync();
+        var v = Factories.Vehicle(internalUserProfileId: profileId);
         await _sut.CreateAsync(v);
 
-        await _users.DeleteAsync(user.Id);
+        await _users.DeleteAsync(userId);
 
-        var fetched = await _sut.GetByIdAsync(v.Id);
-        Assert.NotNull(fetched);
-        Assert.Null(fetched!.UserId);
+        Assert.Null(await _sut.GetByIdAsync(v.Id));
     }
 }

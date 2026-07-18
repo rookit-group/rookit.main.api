@@ -33,9 +33,21 @@ internal static class Factories
             UpdatedAt = updatedAt,
         };
 
-    public static VehicleEntity Vehicle(
+    public static InternalUserProfileEntity InternalUserProfile(
+        Guid userId,
         Guid? id = null,
-        Guid? userId = null,
+        DateTime? createdAt = null,
+        DateTime? updatedAt = null) => new()
+        {
+            Id = id ?? Guid.NewGuid(),
+            UserId = userId,
+            CreatedAt = createdAt ?? BaseUtc,
+            UpdatedAt = updatedAt,
+        };
+
+    public static VehicleEntity Vehicle(
+        Guid internalUserProfileId,
+        Guid? id = null,
         string licensePlate = "AA-123-BB",
         string vin = "1HGBH41JXMN109186",
         string brand = "Toyota",
@@ -54,7 +66,7 @@ internal static class Factories
         DateTime? updatedAt = null) => new()
         {
             Id = id ?? Guid.NewGuid(),
-            UserId = userId,
+            InternalUserProfileId = internalUserProfileId,
             LicensePlate = licensePlate,
             Vin = vin,
             Brand = brand,

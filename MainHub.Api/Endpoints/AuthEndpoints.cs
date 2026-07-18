@@ -39,7 +39,7 @@ public static class AuthEndpoints
       .Produces(StatusCodes.Status302Found);
 
     authBuilder
-      .MapGet("/callback", TelegramCallbackAsync)
+      .MapGet("/callback", TelegramMobileCallbackAsync)
       .WithSummary("Handle the Telegram login callback and exchange the authorization code for an internal JWT token");
 
     authBuilder
@@ -167,7 +167,7 @@ public static class AuthEndpoints
     return SuccessRedirectToWeb(settings, internalToken, string.Empty, isAdmin: true);
   }
 
-  internal static async Task<IResult> TelegramCallbackAsync(
+  internal static async Task<IResult> TelegramMobileCallbackAsync(
     HttpRequest request,
     IOptions<TelegramSettings> telegramSettings,
     ITokenService tokenService,
