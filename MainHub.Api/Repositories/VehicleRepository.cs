@@ -24,9 +24,9 @@ public interface IVehicleRepository
 public class VehicleRepository : IVehicleRepository
 {
     private const string SelectColumns =
-        "id, internal_user_profile_id, license_plate, vin, brand, model, year_created, bought_at, " +
-        "wheel_drive_type, engine_capacity, fuel_type, transmission_type, engine_power, " +
-        "color, mileage, photo_storage_keys, created_at, updated_at";
+        "v.id, v.internal_user_profile_id, v.license_plate, v.vin, v.brand, v.model, v.year_created, v.bought_at, " +
+        "v.wheel_drive_type, v.engine_capacity, v.fuel_type, v.transmission_type, v.engine_power, " +
+        "v.color, v.mileage, v.photo_storage_keys, v.created_at, v.updated_at";
 
     private readonly NpgsqlDataSource _dataSource;
 
@@ -73,7 +73,7 @@ public class VehicleRepository : IVehicleRepository
 
     public async Task<VehicleEntity?> GetByIdAsync(Guid id)
     {
-        await using var cmd = _dataSource.CreateCommand($"SELECT {SelectColumns} FROM vehicles WHERE id = @id");
+        await using var cmd = _dataSource.CreateCommand($"SELECT {SelectColumns} FROM vehicles v WHERE v.id = @id");
         cmd.Parameters.AddWithValue("id", id);
         await using var reader = await cmd.ExecuteReaderAsync();
         return await reader.ReadAsync() ? Map(reader) : null;
@@ -82,7 +82,7 @@ public class VehicleRepository : IVehicleRepository
     public async Task<List<VehicleEntity>> GetByIdsAsync(List<Guid> ids)
     {
         if (ids.Count == 0) return [];
-        await using var cmd = _dataSource.CreateCommand($"SELECT {SelectColumns} FROM vehicles WHERE id = ANY(@ids)");
+        await using var cmd = _dataSource.CreateCommand($"SELECT {SelectColumns} FROM vehicles v WHERE v.id = ANY(@ids)");
         cmd.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ids.ToArray() });
         return await ReadListAsync(cmd);
     }
@@ -97,7 +97,7 @@ public class VehicleRepository : IVehicleRepository
     public async Task<List<VehicleEntity>> GetAllVehiclesAsync(int skip, int limit)
     {
         await using var cmd = _dataSource.CreateCommand(
-            $"SELECT {SelectColumns} FROM vehicles ORDER BY created_at DESC OFFSET @skip LIMIT @limit");
+            $"SELECT {SelectColumns} FROM vehicles v ORDER BY v.created_at DESC OFFSET @skip LIMIT @limit");
         cmd.Parameters.AddWithValue("skip", skip);
         cmd.Parameters.AddWithValue("limit", limit);
         return await ReadListAsync(cmd);
