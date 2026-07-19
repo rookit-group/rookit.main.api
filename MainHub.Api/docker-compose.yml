@@ -46,6 +46,10 @@ services:
       # Override MinioSettings__Endpoint for the compose network - inside the
       # network the app reaches Minio via the service name, not localhost.
       - MinioSettings__Endpoint=minio:9000
+      # PublicEndpoint is used only when signing presigned URLs. Clients (browser,
+      # mobile app) live outside the compose network, so the URL must point at a
+      # host they can resolve. In prod set this to your real MinIO/CDN hostname.
+      - MinioSettings__PublicEndpoint=localhost:9000
     ports:
       - "5001:5001"
     depends_on:

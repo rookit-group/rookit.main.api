@@ -80,14 +80,30 @@ if (minioSettings == null || string.IsNullOrEmpty(minioSettings.Endpoint))
 {
     throw new InvalidOperationException("MinioSettings is not configured properly.");
 }
-builder.Services.AddSingleton<IMinioClient>(_ =>
+static IMinioClient BuildMinioClient(MinioSettings settings, string endpoint, bool useSsl)
 {
-    var minioBuilder = new MinioClient()
-        .WithEndpoint(minioSettings.Endpoint)
-        .WithCredentials(minioSettings.AccessKey, minioSettings.SecretKey);
-    if (minioSettings.UseSsl) minioBuilder = minioBuilder.WithSSL();
-    if (!string.IsNullOrEmpty(minioSettings.Region)) minioBuilder = minioBuilder.WithRegion(minioSettings.Region);
-    return minioBuilder.Build();
+    var b = new MinioClient()
+        .WithEndpoint(endpoint)
+        .WithCredentials(settings.AccessKey, settings.SecretKey);
+    if (useSsl) b = b.WithSSL();
+    if (!string.IsNullOrEmpty(settings.Region)) b = b.WithRegion(settings.Region);
+    return b.Build();
+}
+
+// Internal client: talks to Minio over the private network for uploads, downloads, bucket ops.
+builder.Services.AddSingleton<IMinioClient>(_ =>
+    BuildMinioClient(minioSettings, minioSettings.Endpoint, minioSettings.UseSsl));
+
+// Presign client: used only to generate presigned URLs. Bound to the publicly reachable
+// hostname so the signature is valid against a host clients can actually resolve.
+// Falls back to the internal endpoint when PublicEndpoint isn't configured.
+builder.Services.AddKeyedSingleton<IMinioClient>(MinioClientKeys.Presign, (_, _) =>
+{
+    var endpoint = string.IsNullOrWhiteSpace(minioSettings.PublicEndpoint)
+        ? minioSettings.Endpoint
+        : minioSettings.PublicEndpoint;
+    var useSsl = minioSettings.PublicUseSsl ?? minioSettings.UseSsl;
+    return BuildMinioClient(minioSettings, endpoint, useSsl);
 });
 
 // 🟦 Register application services 

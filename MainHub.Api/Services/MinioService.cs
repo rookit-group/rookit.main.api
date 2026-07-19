@@ -1,4 +1,5 @@
 using MainHub.Api.Config;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Minio;
 using Minio.DataModel.Args;
@@ -60,11 +61,13 @@ public interface IMinioService
 
 public class MinioService(
     IMinioClient client,
+    [FromKeyedServices(MinioClientKeys.Presign)] IMinioClient presignClient,
     IOptions<MinioSettings> settings,
     ILogger<MinioService> logger
 ) : IMinioService
 {
     private readonly IMinioClient _client = client;
+    private readonly IMinioClient _presignClient = presignClient;
     private readonly MinioSettings _settings = settings.Value;
     private readonly ILogger<MinioService> _logger = logger;
 
@@ -151,7 +154,7 @@ public class MinioService(
         CancellationToken ct = default)
     {
         var name = Resolve(bucket);
-        return _client.PresignedGetObjectAsync(
+        return _presignClient.PresignedGetObjectAsync(
             new PresignedGetObjectArgs()
                 .WithBucket(name)
                 .WithObject(objectName)
@@ -165,7 +168,7 @@ public class MinioService(
         CancellationToken ct = default)
     {
         var name = Resolve(bucket);
-        return _client.PresignedPutObjectAsync(
+        return _presignClient.PresignedPutObjectAsync(
             new PresignedPutObjectArgs()
                 .WithBucket(name)
                 .WithObject(objectName)
