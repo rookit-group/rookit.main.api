@@ -11,6 +11,19 @@
 -- - INDEX: Speeds up queries on specific columns
 --
 
+-- GARAGE TABLE: Stores garage information
+CREATE TABLE IF NOT EXISTS garages (
+    -- Unique identifier for this garage
+    id          uuid        PRIMARY KEY,
+    -- Name of the garage (required)
+    name        text        NOT NULL,
+    -- When this garage was created
+    created_at  timestamptz NOT NULL,
+    -- When this garage info was last updated
+    updated_at  timestamptz NULL
+);
+
+
 -- USERS TABLE: Stores user account information
 -- Relationship: ONE user has MANY vehicles (ONE-TO-MANY)
 -- Relationship: ONE user has MANY refresh tokens (ONE-TO-MANY)
@@ -33,6 +46,9 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at    timestamptz NULL
 );
 
+-- EXTERNAL USER PROFILES TABLE: Stores external user profile information
+-- Relationship: ONE user has ONE external user profile (ONE-TO-ONE)
+-- Relationship: ONE external user profile has MANY vehicles (ONE-TO-MANY)
 CREATE TABLE IF NOT EXISTS external_user_profiles (
     id          uuid        PRIMARY KEY,
     user_id     uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -42,13 +58,87 @@ CREATE TABLE IF NOT EXISTS external_user_profiles (
 
 -- INTERNAL USER PROFILES TABLE: Stores internal user profile information
 -- Relationship: ONE user has ONE internal user profile (ONE-TO-ONE)
--- Relationship: ONE internal user profile has MANY vehicles (ONE-TO-MANY)
 CREATE TABLE IF NOT EXISTS internal_user_profiles (
     id          uuid        PRIMARY KEY,
     user_id     uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at  timestamptz NOT NULL,
     updated_at  timestamptz NULL
 );
+
+-- ROLES TABLE: Stores user roles/permissions per garage
+-- Relationship: MANY roles belong to ONE garage (MANY-TO-ONE with garages table)
+CREATE TABLE IF NOT EXISTS roles (
+    -- Unique identifier for this role
+    id          uuid        PRIMARY KEY,
+    -- Link to the garage this role is for (FK to garages table) - required, deletes role if garage deleted
+    garage_id   uuid        NOT NULL REFERENCES garages(id) ON DELETE CASCADE,
+    -- Name of the role (e.g. "Admin", "Mechanic", "Customer") (required)
+    name        text        NOT NULL,
+    -- Description of what this role can do (optional)
+    description text        NULL,
+    -- Scopes/permissions for this role (array of text, required) - e.g. ["users:read", "vehicles:write", "vehicles:read"]
+    scopes      text[]      NOT NULL,
+    -- When this role was created
+    created_at  timestamptz NOT NULL,
+    -- When this role was last updated
+    updated_at  timestamptz NULL,
+    -- Role name must be unique within a garage
+    UNIQUE (garage_id, name),
+    -- Composite candidate key so child tables can FK on (id, garage_id) and enforce
+    -- that a role assignment cannot cross garage boundaries.
+    UNIQUE (id, garage_id)
+);
+
+-- INDEX: Speeds up "find all roles for a garage" queries and FK cascade lookups
+CREATE INDEX IF NOT EXISTS ix_roles_garage_id ON roles(garage_id);
+
+-- INTERNAL_USER_PROFILES_GARAGES TABLE: Junction/link table for the MANY-TO-MANY relationship
+-- Relationship: MANY internal_user_profiles belong to MANY garages
+-- Each row = one internal_user_profile is linked to one garage
+CREATE TABLE IF NOT EXISTS internal_user_profiles_garages (
+    -- Link to the internal user profile (FK to internal_user_profiles table) - deletes link if internal user profile deleted
+    internal_user_profile_id    uuid        NOT NULL REFERENCES internal_user_profiles(id)   ON DELETE CASCADE,
+    -- Link to the garage (FK to garages table) - deletes link if garage deleted
+    garage_id  uuid        NOT NULL REFERENCES garages(id) ON DELETE CASCADE,
+    -- When this user was added to this garage
+    created_at timestamptz NOT NULL,
+    -- When this user was last updated in this garage
+    updated_at timestamptz NULL,
+    -- COMPOSITE PRIMARY KEY: the pair (internal_user_profile_id, garage_id) must be unique
+    -- This prevents linking the same internal user profile to the same garage twice
+    PRIMARY KEY (internal_user_profile_id, garage_id)
+);
+
+-- INDEX: Speeds up "find all users in a garage" queries
+CREATE INDEX IF NOT EXISTS ix_internal_user_profiles_garages_garage_id ON internal_user_profiles_garages(garage_id);
+-- (the composite PK already indexes internal_user_profile_id first, so "find all garages for an internal user profile" is covered)
+
+-- INTERNAL_USER_PROFILE_GARAGE_ROLES TABLE: Roles assigned to a user within a garage
+-- Normalized replacement for the previous role_ids uuid[] column - preserves referential integrity
+-- so deleting a role automatically removes its assignments.
+CREATE TABLE IF NOT EXISTS internal_user_profile_garage_roles (
+    internal_user_profile_id uuid NOT NULL,
+    garage_id                uuid NOT NULL,
+    role_id                  uuid NOT NULL,
+    -- When this role was granted
+    created_at               timestamptz NOT NULL,
+    -- When this assignment was last updated (optional)
+    updated_at               timestamptz NULL,
+    PRIMARY KEY (internal_user_profile_id, garage_id, role_id),
+    -- FK to the membership row - deleting membership removes all role assignments
+    FOREIGN KEY (internal_user_profile_id, garage_id)
+        REFERENCES internal_user_profiles_garages(internal_user_profile_id, garage_id)
+        ON DELETE CASCADE,
+    -- Composite FK to roles(id, garage_id) - deleting a role removes this assignment
+    -- and, critically, guarantees the role belongs to the same garage as the membership.
+    FOREIGN KEY (role_id, garage_id)
+        REFERENCES roles(id, garage_id)
+        ON DELETE CASCADE
+);
+
+-- INDEX: Speeds up "find all users with a given role" queries and FK cascade lookups
+CREATE INDEX IF NOT EXISTS ix_internal_user_profile_garage_roles_role_id
+    ON internal_user_profile_garage_roles(role_id);
 
 -- VEHICLES TABLE: Stores vehicle/car information
 -- Relationship: MANY vehicles belong to ONE external user profile (MANY-TO-ONE with external_user_profiles table)
