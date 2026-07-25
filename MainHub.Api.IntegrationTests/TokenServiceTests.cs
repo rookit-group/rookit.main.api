@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using MainHub.Api.Authorization;
 using MainHub.Api.Config;
 using MainHub.Api.Services;
@@ -81,5 +82,37 @@ public class TokenServiceTests
             sut.GenerateGarageToken(Guid.NewGuid(), Guid.NewGuid(), [Scope.Wildcard]));
 
         Assert.Equal(Scope.Wildcard, jwt.Claims.Single(c => c.Type == "scope").Value);
+    }
+
+    [Fact]
+    public void GetScopesFromClaims_reads_the_space_delimited_scope_claim()
+    {
+        var sut = BuildSut();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(GarageContext.ScopeClaim, $"{Scope.StaffRead} {Scope.RoleManage}")], "test"));
+
+        var scopes = sut.GetScopesFromClaims(principal);
+
+        Assert.Equal([Scope.StaffRead, Scope.RoleManage], scopes);
+    }
+
+    [Fact]
+    public void GetScopesFromClaims_returns_empty_when_the_scope_claim_is_absent()
+    {
+        var sut = BuildSut();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim("userId", Guid.NewGuid().ToString())], "test"));
+
+        Assert.Empty(sut.GetScopesFromClaims(principal));
+    }
+
+    [Fact]
+    public void GetScopesFromClaims_returns_empty_when_the_scope_claim_is_blank()
+    {
+        var sut = BuildSut();
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(GarageContext.ScopeClaim, "   ")], "test"));
+
+        Assert.Empty(sut.GetScopesFromClaims(principal));
     }
 }

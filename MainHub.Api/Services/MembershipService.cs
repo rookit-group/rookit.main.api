@@ -6,8 +6,9 @@ namespace MainHub.Api.Services;
 
 public interface IMembershipService
 {
-    // Adds an already-registered user to a garage with a role, creating their internal staff
-    // profile on first use. Fails if they are already a member.
+    // Adds an already-registered user to a garage with a role. The user must already have signed in
+    // (so their internal staff profile exists); inviting an unknown user fails. Fails if they are
+    // already a member.
     Task<GarageMembershipEntity> InviteAsync(
         Guid garageId, Guid userId, Guid roleId, IEnumerable<string> actorScopes);
 
@@ -25,8 +26,8 @@ public interface IMembershipService
 //   * Duplicate guard    - a user can't be invited to a garage they already belong to.
 //   * Last-admin guard   - the garage must always keep at least one member who can manage staff
 //                          (Scope.StaffManage, wildcard counts), so it can never lock itself out.
-// The invitee is identified by userId; their internal_user_profile is created on first use (it is
-// a standalone staff identity, so an orphan on failure is harmless and reused next time).
+// The invitee is identified by userId and must already have an internal_user_profile (created the
+// first time they sign in) - you cannot invite someone who has never used the app.
 public class MembershipService(
     IInternalUserProfileRepository internalUserProfileRepository,
     IRoleRepository roleRepository,
@@ -43,7 +44,10 @@ public class MembershipService(
         var role = await GetGarageRoleAsync(roleId, garageId);
         PermissionGuard.EnsureCanGrant(actorScopes, role.Scopes);
 
-        var profileId = await GetOrCreateProfileIdAsync(userId);
+        // The invitee must already exist as an internal staff user (profile created at their first
+        // login). We never create the profile here - inviting an unknown user is an error.
+        var profileId = await _internalUserProfileRepository.GetIdByUserIdAsync(userId)
+            ?? throw new KeyNotFoundException("No such user. The user must sign in at least once before they can be invited.");
 
         if (await _membershipRepository.GetAsync(profileId, garageId) is not null)
         {
@@ -125,9 +129,6 @@ public class MembershipService(
             ?? throw new KeyNotFoundException("This user is not a member of the garage.");
         return (profileId, membership);
     }
-
-    private async Task<Guid> GetOrCreateProfileIdAsync(Guid userId) =>
-        await _internalUserProfileRepository.EnsureAsync(userId, DateTime.UtcNow);
 
     private async Task EnsureNotLastStaffManagerAsync(Guid garageId)
     {

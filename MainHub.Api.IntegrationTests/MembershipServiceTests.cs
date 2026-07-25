@@ -40,12 +40,13 @@ public class MembershipServiceTests : IAsyncLifetime
         return garage.Id;
     }
 
-    // Creates a user (the identity being invited) and returns its id. Note: NO internal profile is
-    // created here - the service is responsible for get-or-creating it.
+    // Creates a user AND their internal profile - i.e. someone who has signed in at least once and is
+    // therefore eligible to be invited to a garage. Returns the user id.
     private async Task<Guid> SeedUserAsync()
     {
         var user = Factories.User();
         await _users.CreateAsync(user);
+        await _profiles.CreateAsync(Factories.InternalUserProfile(user.Id));
         return user.Id;
     }
 
@@ -59,7 +60,7 @@ public class MembershipServiceTests : IAsyncLifetime
     // ----- Invite -----
 
     [Fact]
-    public async Task Invite_creates_profile_and_membership_for_a_new_staff_user()
+    public async Task Invite_adds_an_existing_user_as_a_member_with_the_role()
     {
         var garageId = await SeedGarageAsync();
         var userId = await SeedUserAsync();
@@ -67,28 +68,29 @@ public class MembershipServiceTests : IAsyncLifetime
 
         var membership = await _sut.InviteAsync(garageId, userId, roleId, OwnerScopes);
 
-        // A profile was created on the fly...
+        // The membership hangs off the user's existing profile...
         var profileId = await _profiles.GetIdByUserIdAsync(userId);
         Assert.NotNull(profileId);
         Assert.Equal(profileId!.Value, membership.InternalUserProfileId);
-        // ...and the membership persisted with the requested role.
+        // ...and persisted with the requested role.
         var fetched = await _memberships.GetAsync(profileId.Value, garageId);
         Assert.NotNull(fetched);
         Assert.Equal(roleId, fetched!.RoleId);
     }
 
     [Fact]
-    public async Task Invite_reuses_existing_profile()
+    public async Task Invite_throws_when_the_user_has_never_signed_in()
     {
         var garageId = await SeedGarageAsync();
-        var userId = await SeedUserAsync();
-        var existingProfile = Factories.InternalUserProfile(userId);
-        await _profiles.CreateAsync(existingProfile);
         var roleId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
 
-        var membership = await _sut.InviteAsync(garageId, userId, roleId, OwnerScopes);
+        // A user row with NO internal profile: someone who exists in principle but has never signed
+        // in, so cannot be invited yet.
+        var user = Factories.User();
+        await _users.CreateAsync(user);
 
-        Assert.Equal(existingProfile.Id, membership.InternalUserProfileId);
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => _sut.InviteAsync(garageId, user.Id, roleId, OwnerScopes));
     }
 
     [Fact]

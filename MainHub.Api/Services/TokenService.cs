@@ -54,6 +54,14 @@ public interface ITokenService
     Guid GetUserIdFromClaims(ClaimsPrincipal claims);
 
     /// <summary>
+    /// Reads the caller's permission scopes from a garage token's space-delimited <c>scope</c> claim.
+    /// Returns an empty list when the claim is absent. Used by garage-scoped endpoints to pass the
+    /// actor's own scopes into the service-layer escalation guards.
+    /// </summary>
+    /// <param name="claims">The ClaimsPrincipal for the current garage-scoped request.</param>
+    IReadOnlyList<string> GetScopesFromClaims(ClaimsPrincipal claims);
+
+    /// <summary>
     /// Generates a cryptographically random opaque refresh token string.
     /// </summary>
     string GenerateRefreshToken();
@@ -221,6 +229,21 @@ public class TokenService : ITokenService
     {
         var bytes = RandomNumberGenerator.GetBytes(64);
         return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+    }
+
+    public IReadOnlyList<string> GetScopesFromClaims(ClaimsPrincipal claims)
+    {
+        ArgumentNullException.ThrowIfNull(claims);
+
+        var scopeClaim = claims.FindFirst(GarageContext.ScopeClaim)?.Value;
+        if (string.IsNullOrWhiteSpace(scopeClaim))
+        {
+            return [];
+        }
+
+        // Scopes are stored space-delimited in a single claim (OAuth convention), mirroring how
+        // GenerateGarageToken writes them.
+        return scopeClaim.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 }
 

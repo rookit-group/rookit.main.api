@@ -10,15 +10,13 @@ public interface IRoleService
         Guid garageId, string name, string? description,
         IReadOnlyList<string> scopes, IEnumerable<string> actorScopes);
 
-    Task<RoleEntity?> GetByIdAsync(Guid id);
-
     Task<List<RoleEntity>> ListByGarageAsync(Guid garageId);
 
     Task<RoleEntity> UpdateAsync(
-        Guid roleId, string name, string? description,
+        Guid garageId, Guid roleId, string name, string? description,
         IReadOnlyList<string> scopes, IEnumerable<string> actorScopes);
 
-    Task DeleteAsync(Guid roleId);
+    Task DeleteAsync(Guid garageId, Guid roleId);
 }
 
 // Owner-facing CRUD over garage roles. The domain rules that must not be bypassable live here
@@ -59,17 +57,14 @@ public class RoleService(
         return role;
     }
 
-    public Task<RoleEntity?> GetByIdAsync(Guid id) => _roleRepository.GetByIdAsync(id);
-
     public Task<List<RoleEntity>> ListByGarageAsync(Guid garageId) =>
         _roleRepository.ListByGarageAsync(garageId);
 
     public async Task<RoleEntity> UpdateAsync(
-        Guid roleId, string name, string? description,
+        Guid garageId, Guid roleId, string name, string? description,
         IReadOnlyList<string> scopes, IEnumerable<string> actorScopes)
     {
-        var role = await _roleRepository.GetByIdAsync(roleId)
-            ?? throw new KeyNotFoundException($"Role with ID {roleId} not found.");
+        var role = await GetGarageRoleAsync(roleId, garageId);
 
         EnsureNotSystemRole(role, "edited");
         PermissionGuard.EnsureCanGrant(actorScopes, scopes);
@@ -83,10 +78,9 @@ public class RoleService(
         return role;
     }
 
-    public async Task DeleteAsync(Guid roleId)
+    public async Task DeleteAsync(Guid garageId, Guid roleId)
     {
-        var role = await _roleRepository.GetByIdAsync(roleId)
-            ?? throw new KeyNotFoundException($"Role with ID {roleId} not found.");
+        var role = await GetGarageRoleAsync(roleId, garageId);
 
         EnsureNotSystemRole(role, "deleted");
 
@@ -99,6 +93,20 @@ public class RoleService(
         }
 
         await _roleRepository.DeleteAsync(roleId);
+    }
+
+    // Loads a role and asserts it belongs to the garage the caller is acting in. A garage token only
+    // authorizes its own garage (enforced upstream), so addressing a role from another garage - or a
+    // non-existent one - is surfaced as not-found rather than letting a cross-garage edit/delete slip
+    // through on a matching roleId.
+    private async Task<RoleEntity> GetGarageRoleAsync(Guid roleId, Guid garageId)
+    {
+        var role = await _roleRepository.GetByIdAsync(roleId);
+        if (role is null || role.GarageId != garageId)
+        {
+            throw new KeyNotFoundException($"Role with ID {roleId} not found in this garage.");
+        }
+        return role;
     }
 
     // The Owner role (and any future system role) is owned by the platform and must never be

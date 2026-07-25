@@ -117,6 +117,8 @@ builder.Services.AddScoped<IVehicleRepository, VehicleRepository>();
 builder.Services.AddScoped<IServiceHistoryRepository, ServiceHistoryRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IGarageMembershipRepository, GarageMembershipRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IGarageRepository, GarageRepository>();
 
 // 🟦 Register application repositories
 builder.Services.AddScoped<IUserService, UserService>();
@@ -125,6 +127,8 @@ builder.Services.AddScoped<IVehicleService, VehicleService>();
 builder.Services.AddScoped<IServiceHistoryService, ServiceHistoryService>();
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IRoleService, RoleService>();
+builder.Services.AddScoped<IGarageService, GarageService>();
 builder.Services.AddSingleton<IMinioService, MinioService>();
 
 builder.Services.AddSingleton<IAuthorizationHandler, AllowedTelegramAdminAuthorizationHandler>();
@@ -143,6 +147,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateVehicleDtoValidator>(
 builder.Services.AddValidatorsFromAssemblyContaining<UpdateVehicleDtoValidator>();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateServiceHistoryDetailsDtoValidator>();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateServiceHistoryRecordDtoValidator>();
+builder.Services.AddValidatorsFromAssemblyContaining<CreateRoleDtoValidator>();
 
 // 🟦 Add controllers and Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -338,6 +343,7 @@ app.UseAuthorization();
 // 🟦 Register application Endpoints
 app.MapAuthEndpoints();
 app.MapGarageEndpoints();
+app.MapRoleEndpoints();
 app.MapUserEndpoints();
 app.MapVehicleEndpoints();
 app.MapServiceHistoryEndpoints();

@@ -104,7 +104,7 @@ public class RoleServiceTests : IAsyncLifetime
         var created = await _sut.CreateAsync(garageId, "Mechanic", "old", [Scope.GarageRead], OwnerScopes);
 
         var updated = await _sut.UpdateAsync(
-            created.Id, "Senior Mechanic", "new", [Scope.GarageRead, Scope.StaffManage], OwnerScopes);
+            garageId, created.Id, "Senior Mechanic", "new", [Scope.GarageRead, Scope.StaffManage], OwnerScopes);
 
         var fetched = await _roles.GetByIdAsync(created.Id);
         Assert.NotNull(fetched);
@@ -118,7 +118,24 @@ public class RoleServiceTests : IAsyncLifetime
     public async Task Update_throws_when_role_missing()
     {
         await Assert.ThrowsAsync<KeyNotFoundException>(() => _sut.UpdateAsync(
-            Guid.NewGuid(), "X", null, [Scope.GarageRead], OwnerScopes));
+            Guid.NewGuid(), Guid.NewGuid(), "X", null, [Scope.GarageRead], OwnerScopes));
+    }
+
+    // A garage token only authorizes its own garage: addressing a role that exists but belongs to a
+    // different garage must be treated as not-found, never edited.
+    [Fact]
+    public async Task Update_treats_a_role_from_another_garage_as_not_found()
+    {
+        var garageId = await SeedGarageAsync();
+        var otherGarageId = await SeedGarageAsync();
+        var foreignRole = await _sut.CreateAsync(otherGarageId, "Foreign", null, [Scope.GarageRead], OwnerScopes);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => _sut.UpdateAsync(
+            garageId, foreignRole.Id, "Hijacked", null, [Scope.GarageRead], OwnerScopes));
+
+        // The foreign role is untouched.
+        var fetched = await _roles.GetByIdAsync(foreignRole.Id);
+        Assert.Equal("Foreign", fetched!.Name);
     }
 
     [Fact]
@@ -129,7 +146,7 @@ public class RoleServiceTests : IAsyncLifetime
         string[] actorScopes = [Scope.GarageRead]; // cannot grant StaffManage
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.UpdateAsync(
-            created.Id, "Mechanic", null, [Scope.GarageRead, Scope.StaffManage], actorScopes));
+            garageId, created.Id, "Mechanic", null, [Scope.GarageRead, Scope.StaffManage], actorScopes));
     }
 
     // A platform-seeded system role (the Owner role) is immutable and must reject edits, even from
@@ -142,7 +159,7 @@ public class RoleServiceTests : IAsyncLifetime
         await _roles.CreateAsync(ownerRole);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.UpdateAsync(
-            ownerRole.Id, "Renamed Owner", null, [Scope.GarageRead], OwnerScopes));
+            garageId, ownerRole.Id, "Renamed Owner", null, [Scope.GarageRead], OwnerScopes));
 
         var fetched = await _roles.GetByIdAsync(ownerRole.Id);
         Assert.NotNull(fetched);
@@ -158,7 +175,7 @@ public class RoleServiceTests : IAsyncLifetime
         var garageId = await SeedGarageAsync();
         var role = await _sut.CreateAsync(garageId, "Temp", null, [Scope.GarageRead], OwnerScopes);
 
-        await _sut.DeleteAsync(role.Id);
+        await _sut.DeleteAsync(garageId, role.Id);
 
         Assert.Null(await _roles.GetByIdAsync(role.Id));
     }
@@ -166,7 +183,19 @@ public class RoleServiceTests : IAsyncLifetime
     [Fact]
     public async Task Delete_throws_when_role_missing()
     {
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => _sut.DeleteAsync(Guid.NewGuid()));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => _sut.DeleteAsync(Guid.NewGuid(), Guid.NewGuid()));
+    }
+
+    // Cross-garage isolation: a role from another garage is not-found here and must survive.
+    [Fact]
+    public async Task Delete_treats_a_role_from_another_garage_as_not_found()
+    {
+        var garageId = await SeedGarageAsync();
+        var otherGarageId = await SeedGarageAsync();
+        var foreignRole = await _sut.CreateAsync(otherGarageId, "Foreign", null, [Scope.GarageRead], OwnerScopes);
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => _sut.DeleteAsync(garageId, foreignRole.Id));
+        Assert.NotNull(await _roles.GetByIdAsync(foreignRole.Id));
     }
 
     // In-use guard: a role held by at least one member cannot be deleted, and the role survives.
@@ -182,7 +211,7 @@ public class RoleServiceTests : IAsyncLifetime
         await _profiles.CreateAsync(profile);
         await _memberships.AddAsync(Factories.GarageMembership(profile.Id, garageId, role.Id));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.DeleteAsync(role.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.DeleteAsync(garageId, role.Id));
         Assert.NotNull(await _roles.GetByIdAsync(role.Id));
     }
 
@@ -194,7 +223,7 @@ public class RoleServiceTests : IAsyncLifetime
         var ownerRole = Factories.Role(garageId, name: "Owner", scopes: [Scope.Wildcard], isSystem: true);
         await _roles.CreateAsync(ownerRole);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.DeleteAsync(ownerRole.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.DeleteAsync(garageId, ownerRole.Id));
         Assert.NotNull(await _roles.GetByIdAsync(ownerRole.Id));
     }
 

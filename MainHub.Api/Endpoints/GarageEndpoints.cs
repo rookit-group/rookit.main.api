@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using MainHub.Api.Config;
 using MainHub.Api.Enums;
+using MainHub.Api.Filters;
 using MainHub.Api.Repositories;
 using MainHub.Api.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -24,10 +25,47 @@ public static class GarageEndpoints
       .Produces<IReadOnlyList<GarageListItemDto>>(StatusCodes.Status200OK);
 
     garages
+      .MapPost("", CreateGarageAsync)
+      .AddEndpointFilter<ValidationFilter<CreateGarageDto>>()
+      .WithSummary("Create a garage (self-serve); the caller becomes its owner")
+      .Produces<GarageListItemDto>(StatusCodes.Status201Created)
+      .ProducesValidationProblem();
+
+    garages
       .MapPost("/{garageId}/session", CreateGarageSessionAsync)
       .WithSummary("Open a garage-scoped session and mint a short-lived garage access token")
       .Produces<string>(StatusCodes.Status200OK)
       .Produces(StatusCodes.Status403Forbidden);
+  }
+
+  // Self-serve garage creation: any authenticated internal user (InternalIdentityJwt) may create a
+  // garage and is atomically seeded as its owner (a wildcard-scoped, immutable "Owner" role +
+  // membership - see GarageService). No permission scope is required because there is no garage
+  // context yet; the identity token is enough. We EnsureAsync the caller's own profile (idempotent,
+  // self-referential) so creation never fails just because the profile row is missing. The response
+  // reuses GarageListItemDto so the client immediately has the same {garage, role} shape the list
+  // endpoint returns and can open a session for the new garage right away.
+  internal static async Task<IResult> CreateGarageAsync(
+    CreateGarageDto dto,
+    ClaimsPrincipal user,
+    ITokenService tokenService,
+    IInternalUserProfileRepository internalUserProfileRepository,
+    IGarageService garageService
+  )
+  {
+    var userId = tokenService.GetUserIdFromClaims(user);
+    var ownerProfileId = await internalUserProfileRepository.EnsureAsync(userId, DateTime.UtcNow);
+
+    var result = await garageService.CreateAsync(dto.Name, ownerProfileId);
+
+    var item = new GarageListItemDto
+    {
+      GarageId = result.Garage.Id,
+      Name = result.Garage.Name,
+      RoleName = result.OwnerRole.Name,
+    };
+
+    return Results.Created($"/api/garages/{result.Garage.Id}", item);
   }
 
   // Stage-1: an authenticated internal user (InternalIdentityJwt) lists the garages they belong to,

@@ -29,6 +29,7 @@ public class GarageEndpointsTests : IAsyncLifetime
     private readonly GarageMembershipRepository _memberships;
     private readonly TokenService _tokenService;
     private readonly PermissionService _permissionService;
+    private readonly GarageService _garageService;
     private readonly IOptions<GarageJwtSettings> _garageOptions;
 
     public GarageEndpointsTests(PostgresFixture fixture)
@@ -55,6 +56,7 @@ public class GarageEndpointsTests : IAsyncLifetime
             _garageOptions);
 
         _permissionService = new PermissionService(_memberships);
+        _garageService = new GarageService(fixture.DataSource, _garages, _roles, _memberships);
     }
 
     public Task InitializeAsync() => _fixture.ResetAsync();
@@ -153,5 +155,49 @@ public class GarageEndpointsTests : IAsyncLifetime
 
         var ok = Assert.IsType<Ok<List<GarageListItemDto>>>(result);
         Assert.Empty(ok.Value!);
+    }
+
+    // Self-serve creation: a logged-in user with no garages creates one and is atomically seeded as
+    // its owner. The profile is created on demand (EnsureAsync), and the new garage immediately shows
+    // up in the caller's list with the "Owner" role.
+    [Fact]
+    public async Task CreateGarage_creates_the_garage_and_makes_the_caller_its_owner()
+    {
+        var user = Factories.User();
+        await _users.CreateAsync(user); // no profile yet - the handler must EnsureAsync it
+        var dto = new CreateGarageDto { Name = "Downtown Motors" };
+
+        var result = await GarageEndpoints.CreateGarageAsync(
+            dto, PrincipalFor(user.Id), _tokenService, _profiles, _garageService);
+
+        var created = Assert.IsType<Created<GarageListItemDto>>(result);
+        Assert.Equal("Downtown Motors", created.Value!.Name);
+        Assert.Equal(GarageService.OwnerRoleName, created.Value.RoleName);
+
+        // The caller can now see the garage in their own list as its owner.
+        var list = await GarageEndpoints.ListMyGaragesAsync(PrincipalFor(user.Id), _tokenService, _memberships);
+        var ok = Assert.IsType<Ok<List<GarageListItemDto>>>(list);
+        var item = Assert.Single(ok.Value!);
+        Assert.Equal(created.Value.GarageId, item.GarageId);
+        Assert.Equal(GarageService.OwnerRoleName, item.RoleName);
+    }
+
+    // The seeded Owner role holds the wildcard, so opening a session for the just-created garage
+    // yields a token carrying "*" - proving the self-serve owner really has full access.
+    [Fact]
+    public async Task CreateGarage_owner_can_open_a_wildcard_session_for_the_new_garage()
+    {
+        var user = Factories.User();
+        await _users.CreateAsync(user);
+
+        var created = Assert.IsType<Created<GarageListItemDto>>(await GarageEndpoints.CreateGarageAsync(
+            new CreateGarageDto { Name = "Grant Test Garage" },
+            PrincipalFor(user.Id), _tokenService, _profiles, _garageService));
+
+        var session = await InvokeAsync(user.Id, created.Value!.GarageId);
+
+        var ok = Assert.IsType<Ok<string>>(session);
+        var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(ok.Value);
+        Assert.Equal(Scope.Wildcard, jwt.Claims.Single(c => c.Type == "scope").Value);
     }
 }
