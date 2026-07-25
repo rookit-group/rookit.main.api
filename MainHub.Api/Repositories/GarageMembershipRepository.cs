@@ -5,6 +5,10 @@ using Npgsql;
 
 namespace MainHub.Api.Repositories;
 
+// Read projection for "the garages a given user belongs to": the garage plus the caller's role in it.
+// Not a wire DTO - the endpoint maps it to GarageListItemDto.
+public record UserGarageListItem(Guid GarageId, string GarageName, string RoleName);
+
 // Init-level repository: only the methods a consumer actually needs today. New queries are
 // added (with a matching integration test) when a service or endpoint requires them, rather
 // than speculatively.
@@ -15,6 +19,7 @@ public interface IGarageMembershipRepository
     Task<int> CountByRoleAsync(Guid roleId);
     Task<int> CountMembersWithScopeAsync(Guid garageId, string scope);
     Task<IReadOnlyList<string>?> GetMemberScopesAsync(Guid userId, Guid garageId);
+    Task<IReadOnlyList<UserGarageListItem>> ListUserGaragesAsync(Guid userId);
     Task<bool> UpdateRoleAsync(Guid internalUserProfileId, Guid garageId, Guid roleId, DateTime updatedAt);
     Task<bool> RemoveAsync(Guid internalUserProfileId, Guid garageId);
 }
@@ -145,6 +150,33 @@ public class GarageMembershipRepository : IGarageMembershipRepository
         cmd.Parameters.AddWithValue("pid", internalUserProfileId);
         cmd.Parameters.AddWithValue("garage_id", garageId);
         return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
+    // Lists every garage the user belongs to, with the user's role name in each, by walking
+    // user -> internal profile -> membership -> garage/role. Ordered by garage name for a stable
+    // selection list. Returns an empty list when the user is not a member of any garage. This backs
+    // the stage-1 "which garages can I open a session for?" screen.
+    public async Task<IReadOnlyList<UserGarageListItem>> ListUserGaragesAsync(Guid userId)
+    {
+        const string sql = @"
+            SELECT g.id, g.name, r.name
+            FROM internal_user_profiles p
+            JOIN internal_user_profiles_garages m ON m.internal_user_profile_id = p.id
+            JOIN garages g ON g.id = m.garage_id
+            JOIN roles r ON r.id = m.role_id AND r.garage_id = m.garage_id
+            WHERE p.user_id = @user_id
+            ORDER BY g.name";
+
+        await using var cmd = _dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("user_id", userId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        var items = new List<UserGarageListItem>();
+        while (await reader.ReadAsync())
+        {
+            items.Add(new UserGarageListItem(reader.GetGuid(0), reader.GetString(1), reader.GetString(2)));
+        }
+        return items;
     }
 
     private static GarageMembershipEntity Map(NpgsqlDataReader r) => new()

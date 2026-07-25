@@ -1,5 +1,6 @@
 using MainHub.Api.Config;
 using Shared.Contracts.DTOs;
+using MainHub.Api.Repositories;
 using MainHub.Api.Services;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -77,10 +78,9 @@ public static class AuthEndpoints
   internal static async Task<IResult> TelegramWebCallbackAsync(
     HttpRequest request,
     IOptions<TelegramSettings> telegramSettings,
-    IOptions<AdminSettings> adminSettings,
     ITokenService tokenService,
-    IRefreshTokenService refreshTokenService,
     IUserService userService,
+    IInternalUserProfileRepository internalUserProfileRepository,
     ILogger<Program> logger
   )
   {
@@ -146,25 +146,34 @@ public static class AuthEndpoints
       return FailedRedirectToWeb(settings, "invalid_id_token");
     }
 
-    var userId = telegramUser.Id;
-    var allowedTelegramIds = adminSettings.Value.AllowedTelegramIds ?? [];
+    // Resolve (or lazily create) the internal user record so the identity token carries our own
+    // user id — the id the garage/RBAC layer keys on — rather than the raw Telegram subject id.
+    var providerId = $"telegram:{telegramUser.Id}";
+    var userEntity = await userService.GetUserByProviderIdAsync(providerId);
 
-    if (!allowedTelegramIds.Contains(userId) || string.IsNullOrEmpty(userId))
+    if (userEntity == null)
     {
-      logger.LogError("Telegram user with ID {UserId} is not in the allowed list", userId);
-      return FailedRedirectToWeb(settings, "access_denied");
+      logger.LogWarning("User not found for ProviderId: {ProviderId}. Creating new user...", providerId);
+      var name = telegramUser.Name ?? telegramUser.Username ?? $"User {telegramUser.Id}";
+      userEntity = await userService.CreateAsync(name, null, providerId, telegramUser.Phone, telegramUser.Picture);
     }
 
-    var internalToken = tokenService.GenerateAdminToken(userId);
-    var providerId = $"telegram:{userId}";
+    if (userEntity == null)
+    {
+      logger.LogWarning("User is null after user retrieval/creation for ProviderId: {ProviderId}", providerId);
+      return FailedRedirectToWeb(settings, "user_creation_failed");
+    }
 
+    // Every internal (company-staff) user gets exactly one internal profile — the row the garage/RBAC
+    // layer hangs memberships off. Create it eagerly at login (idempotent, race-safe) so the profile
+    // always exists before the user is ever invited to a garage.
+    await internalUserProfileRepository.EnsureAsync(userEntity.Id, DateTime.UtcNow);
 
-    logger.LogInformation(
-        "Generated internal JWT token for user: {UserId}",
-        userId
-    );
+    var internalToken = tokenService.GenerateInternalIdentityToken(userEntity.Id);
 
-    return SuccessRedirectToWeb(settings, internalToken, string.Empty, isAdmin: true);
+    logger.LogInformation("Generated internal-identity JWT for user: {UserId}", userEntity.Id);
+
+    return SuccessRedirectToWeb(settings, internalToken, string.Empty, isAdmin: false);
   }
 
   internal static async Task<IResult> TelegramMobileCallbackAsync(

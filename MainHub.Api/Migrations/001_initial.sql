@@ -60,7 +60,10 @@ CREATE TABLE IF NOT EXISTS external_user_profiles (
 -- Relationship: ONE user has ONE internal user profile (ONE-TO-ONE)
 CREATE TABLE IF NOT EXISTS internal_user_profiles (
     id          uuid        PRIMARY KEY,
-    user_id     uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    -- UNIQUE enforces the ONE-TO-ONE with users at the database level, so a user can never end up
+    -- with two profiles - this is what makes the "get-or-create profile" on login/invite race-safe
+    -- (INSERT ... ON CONFLICT (user_id) DO NOTHING relies on this constraint).
+    user_id     uuid        NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     created_at  timestamptz NOT NULL,
     updated_at  timestamptz NULL
 );

@@ -272,6 +272,78 @@ public class GarageMembershipRepositoryTests : IAsyncLifetime
         Assert.Equal(new[] { Scope.Wildcard }, await _sut.GetMemberScopesAsync(user.Id, garageB.Id));
     }
 
+    // ----- ListUserGarages -----
+
+    [Fact]
+    public async Task ListUserGarages_returns_each_garage_with_the_users_role_ordered_by_name()
+    {
+        var user = Factories.User();
+        await _users.CreateAsync(user);
+        var profile = Factories.InternalUserProfile(user.Id);
+        await _profiles.CreateAsync(profile);
+
+        // Two garages for the same user; created out of alphabetical order to prove ORDER BY name.
+        var zeta = Factories.Garage(name: "Zeta Motors");
+        await _garages.CreateAsync(zeta);
+        var zetaRole = Factories.Role(zeta.Id, name: "Mechanic");
+        await _roles.CreateAsync(zetaRole);
+        await _sut.AddAsync(Factories.GarageMembership(profile.Id, zeta.Id, zetaRole.Id));
+
+        var alpha = Factories.Garage(name: "Alpha Auto");
+        await _garages.CreateAsync(alpha);
+        var alphaRole = Factories.Role(alpha.Id, name: "Owner", scopes: [Scope.Wildcard], isSystem: true);
+        await _roles.CreateAsync(alphaRole);
+        await _sut.AddAsync(Factories.GarageMembership(profile.Id, alpha.Id, alphaRole.Id));
+
+        var garages = await _sut.ListUserGaragesAsync(user.Id);
+
+        Assert.Collection(garages,
+            g =>
+            {
+                Assert.Equal(alpha.Id, g.GarageId);
+                Assert.Equal("Alpha Auto", g.GarageName);
+                Assert.Equal("Owner", g.RoleName);
+            },
+            g =>
+            {
+                Assert.Equal(zeta.Id, g.GarageId);
+                Assert.Equal("Zeta Motors", g.GarageName);
+                Assert.Equal("Mechanic", g.RoleName);
+            });
+    }
+
+    [Fact]
+    public async Task ListUserGarages_excludes_garages_the_user_is_not_a_member_of()
+    {
+        var user = Factories.User();
+        await _users.CreateAsync(user);
+        var profile = Factories.InternalUserProfile(user.Id);
+        await _profiles.CreateAsync(profile);
+        var mine = Factories.Garage(name: "Mine");
+        await _garages.CreateAsync(mine);
+        var role = Factories.Role(mine.Id);
+        await _roles.CreateAsync(role);
+        await _sut.AddAsync(Factories.GarageMembership(profile.Id, mine.Id, role.Id));
+
+        // A second garage belonging to a DIFFERENT user must not leak into this user's list.
+        var otherGarage = Factories.Garage(name: "Other");
+        await _garages.CreateAsync(otherGarage);
+        await AddMemberAsync(otherGarage.Id, Factories.Role(otherGarage.Id, name: "Other Role"));
+
+        var garages = await _sut.ListUserGaragesAsync(user.Id);
+
+        Assert.Equal(mine.Id, Assert.Single(garages).GarageId);
+    }
+
+    [Fact]
+    public async Task ListUserGarages_returns_empty_when_user_has_no_memberships()
+    {
+        var user = Factories.User();
+        await _users.CreateAsync(user);
+
+        Assert.Empty(await _sut.ListUserGaragesAsync(user.Id));
+    }
+
     // Creates a fresh user + internal profile in the given garage on the supplied role.
     private async Task AddMemberAsync(Guid garageId, MainHub.Api.Models.RoleEntity role)
     {

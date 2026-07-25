@@ -126,24 +126,8 @@ public class MembershipService(
         return (profileId, membership);
     }
 
-    private async Task<Guid> GetOrCreateProfileIdAsync(Guid userId)
-    {
-        var existing = await _internalUserProfileRepository.GetIdByUserIdAsync(userId);
-        if (existing is Guid id)
-        {
-            return id;
-        }
-
-        var profile = new InternalUserProfileEntity
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = null,
-        };
-        await _internalUserProfileRepository.CreateAsync(profile);
-        return profile.Id;
-    }
+    private async Task<Guid> GetOrCreateProfileIdAsync(Guid userId) =>
+        await _internalUserProfileRepository.EnsureAsync(userId, DateTime.UtcNow);
 
     private async Task EnsureNotLastStaffManagerAsync(Guid garageId)
     {

@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using MainHub.Api.Authorization;
 using MainHub.Api.Config;
 
 namespace MainHub.Api.Services;
@@ -18,6 +19,23 @@ public interface ITokenService
     /// </summary>
     /// <param name="userId">The unique identifier of the admin user.</param>
     string GenerateAdminToken(string userId);
+
+    /// <summary>
+    /// Generates the stage-1 internal-identity token issued to a company-staff user after login,
+    /// before they select a garage. It proves identity only and carries no garage context or scopes.
+    /// </summary>
+    /// <param name="userId">The internal user id (users.id) the token represents.</param>
+    string GenerateInternalIdentityToken(Guid userId);
+
+    /// <summary>
+    /// Generates the stage-2 garage-scoped token minted when an internal user opens a garage session.
+    /// The resolved <paramref name="scopes"/> are embedded in the token so request-time authorization
+    /// is a pure claim check with no database access.
+    /// </summary>
+    /// <param name="userId">The internal user id the token represents.</param>
+    /// <param name="garageId">The garage the token is scoped to.</param>
+    /// <param name="scopes">The permission scopes the user holds within the garage.</param>
+    string GenerateGarageToken(Guid userId, Guid garageId, IReadOnlyList<string> scopes);
 
     /// <summary>
     /// Generates a JWT token for the specified user.
@@ -51,13 +69,25 @@ public class TokenService : ITokenService
     private readonly SymmetricSecurityKey _key;
     private readonly AdminJwtSettings _adminJwtSettings;
     private readonly SymmetricSecurityKey _adminKey;
+    private readonly InternalIdentityJwtSettings _internalIdentityJwtSettings;
+    private readonly SymmetricSecurityKey _internalIdentityKey;
+    private readonly GarageJwtSettings _garageJwtSettings;
+    private readonly SymmetricSecurityKey _garageKey;
 
-    public TokenService(IOptions<JwtSettings> jwtSettings, IOptions<AdminJwtSettings> adminJwtSettings)
+    public TokenService(
+        IOptions<JwtSettings> jwtSettings,
+        IOptions<AdminJwtSettings> adminJwtSettings,
+        IOptions<InternalIdentityJwtSettings> internalIdentityJwtSettings,
+        IOptions<GarageJwtSettings> garageJwtSettings)
     {
         _jwtSettings = jwtSettings.Value;
         _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
         _adminJwtSettings = adminJwtSettings.Value;
         _adminKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_adminJwtSettings.SecretKey));
+        _internalIdentityJwtSettings = internalIdentityJwtSettings.Value;
+        _internalIdentityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_internalIdentityJwtSettings.SecretKey));
+        _garageJwtSettings = garageJwtSettings.Value;
+        _garageKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_garageJwtSettings.SecretKey));
     }
 
     public string GenerateAdminToken(string userId)
@@ -75,6 +105,56 @@ public class TokenService : ITokenService
         var token = new JwtSecurityToken(
             issuer: _adminJwtSettings.Issuer,
             audience: _adminJwtSettings.Audience,
+            claims: claims,
+            expires: expires,
+            signingCredentials: credentials
+        );
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public string GenerateInternalIdentityToken(Guid userId)
+    {
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim("userId", userId.ToString()),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+        };
+
+        var credentials = new SigningCredentials(_internalIdentityKey, SecurityAlgorithms.HmacSha256);
+        var expires = DateTime.UtcNow.AddMinutes(_internalIdentityJwtSettings.ExpirationMinutes);
+
+        var token = new JwtSecurityToken(
+            issuer: _internalIdentityJwtSettings.Issuer,
+            audience: _internalIdentityJwtSettings.Audience,
+            claims: claims,
+            expires: expires,
+            signingCredentials: credentials
+        );
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public string GenerateGarageToken(Guid userId, Guid garageId, IReadOnlyList<string> scopes)
+    {
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim("userId", userId.ToString()),
+            new Claim(GarageContext.GarageIdClaim, garageId.ToString()),
+            // Scopes are space-delimited in a single claim (OAuth convention); request-time
+            // authorization splits this and checks it via Scope.Grants with no database access.
+            new Claim(GarageContext.ScopeClaim, string.Join(' ', scopes)),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+        };
+
+        var credentials = new SigningCredentials(_garageKey, SecurityAlgorithms.HmacSha256);
+        var expires = DateTime.UtcNow.AddMinutes(_garageJwtSettings.ExpirationMinutes);
+
+        var token = new JwtSecurityToken(
+            issuer: _garageJwtSettings.Issuer,
+            audience: _garageJwtSettings.Audience,
             claims: claims,
             expires: expires,
             signingCredentials: credentials

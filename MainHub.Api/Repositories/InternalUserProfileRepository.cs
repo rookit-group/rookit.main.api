@@ -9,6 +9,11 @@ public interface IInternalUserProfileRepository
     Task CreateAsync(InternalUserProfileEntity profile);
     Task<InternalUserProfileEntity?> GetByUserIdAsync(Guid userId);
     Task<Guid?> GetIdByUserIdAsync(Guid userId);
+
+    // Returns the id of the user's internal profile, creating it on first use. Race-safe: relies on
+    // the UNIQUE(user_id) constraint so two concurrent callers (e.g. parallel logins) converge on a
+    // single profile rather than inserting duplicates.
+    Task<Guid> EnsureAsync(Guid userId, DateTime createdAt);
 }
 
 public class InternalUserProfileRepository : IInternalUserProfileRepository
@@ -52,6 +57,32 @@ public class InternalUserProfileRepository : IInternalUserProfileRepository
         cmd.Parameters.AddWithValue("user_id", userId);
         var result = await cmd.ExecuteScalarAsync();
         return result is Guid id ? id : null;
+    }
+
+    public async Task<Guid> EnsureAsync(Guid userId, DateTime createdAt)
+    {
+        // Race-safe get-or-create in a single statement. The CTE tries to insert a fresh profile; if
+        // one already exists for this user (UNIQUE(user_id)) the ON CONFLICT no-ops and RETURNING is
+        // empty, so the outer query falls through to the pre-existing row. LIMIT 1 collapses both arms
+        // to exactly one id, so concurrent first-logins always converge on the same profile.
+        const string sql = @"
+            WITH inserted AS (
+                INSERT INTO internal_user_profiles (id, user_id, created_at, updated_at)
+                VALUES (@id, @user_id, @created_at, NULL)
+                ON CONFLICT (user_id) DO NOTHING
+                RETURNING id
+            )
+            SELECT id FROM inserted
+            UNION ALL
+            SELECT id FROM internal_user_profiles WHERE user_id = @user_id
+            LIMIT 1";
+
+        await using var cmd = _dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("id", Guid.NewGuid());
+        cmd.Parameters.AddWithValue("user_id", userId);
+        cmd.Parameters.AddWithValue("created_at", createdAt);
+        var result = await cmd.ExecuteScalarAsync();
+        return (Guid)result!;
     }
 
     private static InternalUserProfileEntity Map(NpgsqlDataReader r) => new()

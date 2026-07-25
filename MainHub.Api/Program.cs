@@ -116,6 +116,7 @@ builder.Services.AddScoped<IExternalUserProfileRepository, ExternalUserProfileRe
 builder.Services.AddScoped<IVehicleRepository, VehicleRepository>();
 builder.Services.AddScoped<IServiceHistoryRepository, ServiceHistoryRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IGarageMembershipRepository, GarageMembershipRepository>();
 
 // 🟦 Register application repositories
 builder.Services.AddScoped<IUserService, UserService>();
@@ -123,9 +124,15 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IVehicleService, VehicleService>();
 builder.Services.AddScoped<IServiceHistoryService, ServiceHistoryService>();
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddSingleton<IMinioService, MinioService>();
 
 builder.Services.AddSingleton<IAuthorizationHandler, AllowedTelegramAdminAuthorizationHandler>();
+
+// Enforces per-garage scope checks on garage-scoped endpoints (garage-context + scope claim).
+// The policy provider mints a policy on demand for each RequireScope(...) call.
+builder.Services.AddSingleton<IAuthorizationHandler, ScopeAuthorizationHandler>();
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, ScopePolicyProvider>();
 
 // 🟦 Register NHTSA Vehicle API client
 builder.Services.AddNhtsaVpic();
@@ -330,6 +337,7 @@ app.UseAuthorization();
 
 // 🟦 Register application Endpoints
 app.MapAuthEndpoints();
+app.MapGarageEndpoints();
 app.MapUserEndpoints();
 app.MapVehicleEndpoints();
 app.MapServiceHistoryEndpoints();
