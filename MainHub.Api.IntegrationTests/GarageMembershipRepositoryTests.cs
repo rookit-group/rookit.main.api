@@ -344,6 +344,112 @@ public class GarageMembershipRepositoryTests : IAsyncLifetime
         Assert.Empty(await _sut.ListUserGaragesAsync(user.Id));
     }
 
+    // ----- ListGarageMembers -----
+
+    [Fact]
+    public async Task ListGarageMembers_returns_each_member_with_identity_and_role_ordered_by_name()
+    {
+        var garage = Factories.Garage();
+        await _garages.CreateAsync(garage);
+
+        // Two members, seeded out of alphabetical order to prove ORDER BY user name.
+        var (zoeId, _) = await AddNamedMemberAsync(garage.Id, "Zoe", "Mechanic");
+        var (aliceId, aliceRoleId) = await AddNamedMemberAsync(
+            garage.Id, "Alice", "Owner", scopes: [Scope.Wildcard],
+            email: "alice@example.com", pictureUrl: "https://example.com/alice.png");
+
+        var members = await _sut.ListGarageMembersAsync(garage.Id);
+
+        Assert.Collection(members,
+            m =>
+            {
+                Assert.Equal(aliceId, m.UserId);
+                Assert.Equal("Alice", m.Name);
+                Assert.Equal("alice@example.com", m.Email);
+                Assert.Equal("https://example.com/alice.png", m.PictureUrl);
+                Assert.Equal(aliceRoleId, m.RoleId);
+                Assert.Equal("Owner", m.RoleName);
+            },
+            m =>
+            {
+                Assert.Equal(zoeId, m.UserId);
+                Assert.Equal("Zoe", m.Name);
+                Assert.Equal("Mechanic", m.RoleName);
+            });
+    }
+
+    [Fact]
+    public async Task ListGarageMembers_is_scoped_to_the_garage()
+    {
+        var garageA = Factories.Garage();
+        await _garages.CreateAsync(garageA);
+        var garageB = Factories.Garage();
+        await _garages.CreateAsync(garageB);
+
+        var (aId, _) = await AddNamedMemberAsync(garageA.Id, "AlphaPerson", "Mechanic");
+        await AddNamedMemberAsync(garageB.Id, "BetaPerson", "Mechanic");
+
+        var members = await _sut.ListGarageMembersAsync(garageA.Id);
+
+        Assert.Equal(aId, Assert.Single(members).UserId);
+    }
+
+    [Fact]
+    public async Task ListGarageMembers_returns_empty_for_a_garage_with_no_members()
+    {
+        var garage = Factories.Garage();
+        await _garages.CreateAsync(garage);
+
+        Assert.Empty(await _sut.ListGarageMembersAsync(garage.Id));
+    }
+
+    // ----- GetGarageMember -----
+
+    [Fact]
+    public async Task GetGarageMember_returns_the_member_projection_including_null_identity_fields()
+    {
+        var garage = Factories.Garage();
+        await _garages.CreateAsync(garage);
+        // A member whose optional identity fields are null, to cover the nullable mapping.
+        var (userId, roleId) = await AddNamedMemberAsync(
+            garage.Id, "Nadia", "Mechanic", email: null, pictureUrl: null);
+
+        var member = await _sut.GetGarageMemberAsync(garage.Id, userId);
+
+        Assert.NotNull(member);
+        Assert.Equal(userId, member!.UserId);
+        Assert.Equal("Nadia", member.Name);
+        Assert.Null(member.Email);
+        Assert.Null(member.PictureUrl);
+        Assert.Equal(roleId, member.RoleId);
+        Assert.Equal("Mechanic", member.RoleName);
+    }
+
+    [Fact]
+    public async Task GetGarageMember_returns_null_when_the_user_is_not_a_member()
+    {
+        var garage = Factories.Garage();
+        await _garages.CreateAsync(garage);
+
+        Assert.Null(await _sut.GetGarageMemberAsync(garage.Id, Guid.NewGuid()));
+    }
+
+    // Creates a fresh user (with the given name/identity) + internal profile in the given garage on
+    // a fresh role, returning the ids the staff-projection tests assert on.
+    private async Task<(Guid userId, Guid roleId)> AddNamedMemberAsync(
+        Guid garageId, string userName, string roleName, List<string>? scopes = null,
+        string? email = "test@example.com", string? pictureUrl = "https://example.com/p.png")
+    {
+        var user = Factories.User(name: userName, email: email, pictureUrl: pictureUrl);
+        await _users.CreateAsync(user);
+        var profile = Factories.InternalUserProfile(user.Id);
+        await _profiles.CreateAsync(profile);
+        var role = Factories.Role(garageId, name: roleName, scopes: scopes);
+        await _roles.CreateAsync(role);
+        await _sut.AddAsync(Factories.GarageMembership(profile.Id, garageId, role.Id));
+        return (user.Id, role.Id);
+    }
+
     // Creates a fresh user + internal profile in the given garage on the supplied role.
     private async Task AddMemberAsync(Guid garageId, MainHub.Api.Models.RoleEntity role)
     {

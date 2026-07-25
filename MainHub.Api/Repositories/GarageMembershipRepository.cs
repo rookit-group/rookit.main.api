@@ -9,6 +9,11 @@ namespace MainHub.Api.Repositories;
 // Not a wire DTO - the endpoint maps it to GarageListItemDto.
 public record UserGarageListItem(Guid GarageId, string GarageName, string RoleName);
 
+// Read projection for "the members of a given garage": each member's user identity plus the role
+// they hold in this garage. Not a wire DTO - the endpoint maps it to StaffMemberDto.
+public record GarageStaffListItem(
+    Guid UserId, string Name, string? Email, string? PictureUrl, Guid RoleId, string RoleName);
+
 // Init-level repository: only the methods a consumer actually needs today. New queries are
 // added (with a matching integration test) when a service or endpoint requires them, rather
 // than speculatively.
@@ -20,6 +25,8 @@ public interface IGarageMembershipRepository
     Task<int> CountMembersWithScopeAsync(Guid garageId, string scope);
     Task<IReadOnlyList<string>?> GetMemberScopesAsync(Guid userId, Guid garageId);
     Task<IReadOnlyList<UserGarageListItem>> ListUserGaragesAsync(Guid userId);
+    Task<IReadOnlyList<GarageStaffListItem>> ListGarageMembersAsync(Guid garageId);
+    Task<GarageStaffListItem?> GetGarageMemberAsync(Guid garageId, Guid userId);
     Task<bool> UpdateRoleAsync(Guid internalUserProfileId, Guid garageId, Guid roleId, DateTime updatedAt);
     Task<bool> RemoveAsync(Guid internalUserProfileId, Guid garageId);
 }
@@ -28,6 +35,15 @@ public class GarageMembershipRepository : IGarageMembershipRepository
 {
     private const string SelectColumns =
         "internal_user_profile_id, garage_id, role_id, created_at, updated_at";
+
+    // Shared FROM/JOIN for the staff projection (list + single-member), so both queries read the
+    // same columns in the same order and MapStaff can decode them positionally.
+    private const string StaffSelect = @"
+        SELECT u.id, u.name, u.email, u.picture_url, r.id, r.name
+        FROM internal_user_profiles_garages m
+        JOIN internal_user_profiles p ON p.id = m.internal_user_profile_id
+        JOIN users u ON u.id = p.user_id
+        JOIN roles r ON r.id = m.role_id AND r.garage_id = m.garage_id";
 
     private readonly NpgsqlDataSource _dataSource;
 
@@ -179,6 +195,45 @@ public class GarageMembershipRepository : IGarageMembershipRepository
         return items;
     }
 
+    // Lists every member of a garage with their user identity and the role they hold there, by
+    // walking membership -> internal profile -> user, and membership -> role. Ordered by user name
+    // for a stable staff screen. Returns an empty list for a garage with no members. Backs the
+    // garage staff list (staff:read).
+    public async Task<IReadOnlyList<GarageStaffListItem>> ListGarageMembersAsync(Guid garageId)
+    {
+        const string sql = $@"
+            {StaffSelect}
+            WHERE m.garage_id = @garage_id
+            ORDER BY u.name";
+
+        await using var cmd = _dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("garage_id", garageId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        var items = new List<GarageStaffListItem>();
+        while (await reader.ReadAsync())
+        {
+            items.Add(MapStaff(reader));
+        }
+        return items;
+    }
+
+    // Fetches a single garage member's projection (same shape as the list). Returns null when the
+    // user is not a member of the garage. Used to build the response after invite/assign so it
+    // reflects committed state (resolved role name, current user identity).
+    public async Task<GarageStaffListItem?> GetGarageMemberAsync(Guid garageId, Guid userId)
+    {
+        const string sql = $@"
+            {StaffSelect}
+            WHERE m.garage_id = @garage_id AND u.id = @user_id";
+
+        await using var cmd = _dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("garage_id", garageId);
+        cmd.Parameters.AddWithValue("user_id", userId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? MapStaff(reader) : null;
+    }
+
     private static GarageMembershipEntity Map(NpgsqlDataReader r) => new()
     {
         InternalUserProfileId = r.GetGuid(0),
@@ -187,4 +242,13 @@ public class GarageMembershipRepository : IGarageMembershipRepository
         CreatedAt = r.GetFieldValue<DateTime>(3),
         UpdatedAt = r.GetNullableDateTime(4),
     };
+
+    // Decodes the StaffSelect columns positionally: user id, name, email?, picture_url?, role id, role name.
+    private static GarageStaffListItem MapStaff(NpgsqlDataReader r) => new(
+        r.GetGuid(0),
+        r.GetString(1),
+        r.GetNullableString(2),
+        r.GetNullableString(3),
+        r.GetGuid(4),
+        r.GetString(5));
 }

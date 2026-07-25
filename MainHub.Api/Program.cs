@@ -128,6 +128,7 @@ builder.Services.AddScoped<IServiceHistoryService, ServiceHistoryService>();
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
+builder.Services.AddScoped<IMembershipService, MembershipService>();
 builder.Services.AddScoped<IGarageService, GarageService>();
 builder.Services.AddSingleton<IMinioService, MinioService>();
 
@@ -344,6 +345,7 @@ app.UseAuthorization();
 app.MapAuthEndpoints();
 app.MapGarageEndpoints();
 app.MapRoleEndpoints();
+app.MapStaffEndpoints();
 app.MapUserEndpoints();
 app.MapVehicleEndpoints();
 app.MapServiceHistoryEndpoints();
