@@ -1,0 +1,63 @@
+using MainHub.Api.Data;
+using MainHub.Api.Models;
+using Npgsql;
+
+namespace MainHub.Api.Repositories;
+
+// Init-level repository: only the methods a consumer actually needs today. New queries are
+// added (with a matching integration test) when a service or endpoint requires them, rather
+// than speculatively.
+public interface IGarageMembershipRepository
+{
+    Task AddAsync(GarageMembershipEntity membership);
+    Task<GarageMembershipEntity?> GetAsync(Guid internalUserProfileId, Guid garageId);
+}
+
+public class GarageMembershipRepository : IGarageMembershipRepository
+{
+    private const string SelectColumns =
+        "internal_user_profile_id, garage_id, role_id, created_at, updated_at";
+
+    private readonly NpgsqlDataSource _dataSource;
+
+    public GarageMembershipRepository(NpgsqlDataSource dataSource)
+    {
+        _dataSource = dataSource;
+    }
+
+    public async Task AddAsync(GarageMembershipEntity membership)
+    {
+        const string sql = @"
+            INSERT INTO internal_user_profiles_garages
+                (internal_user_profile_id, garage_id, role_id, created_at, updated_at)
+            VALUES (@pid, @garage_id, @role_id, @created_at, @updated_at)";
+
+        await using var cmd = _dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("pid", membership.InternalUserProfileId);
+        cmd.Parameters.AddWithValue("garage_id", membership.GarageId);
+        cmd.Parameters.AddWithValue("role_id", membership.RoleId);
+        cmd.Parameters.AddWithValue("created_at", membership.CreatedAt);
+        cmd.Parameters.AddWithValue("updated_at", NpgsqlReaderExtensions.NullableParam(membership.UpdatedAt));
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<GarageMembershipEntity?> GetAsync(Guid internalUserProfileId, Guid garageId)
+    {
+        await using var cmd = _dataSource.CreateCommand(
+            $@"SELECT {SelectColumns} FROM internal_user_profiles_garages
+               WHERE internal_user_profile_id = @pid AND garage_id = @garage_id");
+        cmd.Parameters.AddWithValue("pid", internalUserProfileId);
+        cmd.Parameters.AddWithValue("garage_id", garageId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? Map(reader) : null;
+    }
+
+    private static GarageMembershipEntity Map(NpgsqlDataReader r) => new()
+    {
+        InternalUserProfileId = r.GetGuid(0),
+        GarageId = r.GetGuid(1),
+        RoleId = r.GetGuid(2),
+        CreatedAt = r.GetFieldValue<DateTime>(3),
+        UpdatedAt = r.GetNullableDateTime(4),
+    };
+}

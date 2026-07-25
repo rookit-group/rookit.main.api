@@ -66,6 +66,7 @@ public sealed class PostgresFixture : IAsyncLifetime
                 service_history_records,
                 service_histories,
                 vehicles,
+                garages,
                 users
             RESTART IDENTITY CASCADE";
         await using var cmd = DataSource.CreateCommand(sql);

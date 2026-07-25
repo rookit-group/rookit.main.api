@@ -1,3 +1,4 @@
+using MainHub.Api.Authorization;
 using MainHub.Api.Models;
 using Shared.Contracts.Enums;
 
@@ -137,5 +138,61 @@ internal static class Factories
             ExpiresAt = expiresAt ?? BaseUtc.AddDays(30),
             CreatedAt = createdAt ?? BaseUtc,
             IsRevoked = isRevoked,
+        };
+
+    public static InternalUserProfileEntity InternalUserProfile(
+        Guid userId,
+        Guid? id = null,
+        DateTime? createdAt = null,
+        DateTime? updatedAt = null) => new()
+        {
+            Id = id ?? Guid.NewGuid(),
+            UserId = userId,
+            CreatedAt = createdAt ?? BaseUtc,
+            UpdatedAt = updatedAt,
+        };
+
+    public static GarageEntity Garage(
+        Guid? id = null,
+        string name = "Test Garage",
+        DateTime? createdAt = null,
+        DateTime? updatedAt = null) => new()
+        {
+            Id = id ?? Guid.NewGuid(),
+            Name = name,
+            CreatedAt = createdAt ?? BaseUtc,
+            UpdatedAt = updatedAt,
+        };
+
+    public static RoleEntity Role(
+        Guid garageId,
+        Guid? id = null,
+        string name = "Mechanic",
+        string? description = "Handles repairs",
+        List<string>? scopes = null,
+        DateTime? createdAt = null,
+        DateTime? updatedAt = null) => new()
+        {
+            Id = id ?? Guid.NewGuid(),
+            GarageId = garageId,
+            Name = name,
+            Description = description,
+            Scopes = scopes ?? [Scope.StaffRead, Scope.GarageRead],
+            CreatedAt = createdAt ?? BaseUtc,
+            UpdatedAt = updatedAt,
+        };
+
+    public static GarageMembershipEntity GarageMembership(
+        Guid internalUserProfileId,
+        Guid garageId,
+        Guid roleId,
+        DateTime? createdAt = null,
+        DateTime? updatedAt = null) => new()
+        {
+            InternalUserProfileId = internalUserProfileId,
+            GarageId = garageId,
+            RoleId = roleId,
+            CreatedAt = createdAt ?? BaseUtc,
+            UpdatedAt = updatedAt,
         };
 }
