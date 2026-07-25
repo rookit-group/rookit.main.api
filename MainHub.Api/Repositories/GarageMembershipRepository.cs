@@ -1,3 +1,4 @@
+using MainHub.Api.Authorization;
 using MainHub.Api.Data;
 using MainHub.Api.Models;
 using Npgsql;
@@ -12,6 +13,9 @@ public interface IGarageMembershipRepository
     Task AddAsync(GarageMembershipEntity membership, NpgsqlConnection? connection = null);
     Task<GarageMembershipEntity?> GetAsync(Guid internalUserProfileId, Guid garageId);
     Task<int> CountByRoleAsync(Guid roleId);
+    Task<int> CountMembersWithScopeAsync(Guid garageId, string scope);
+    Task<bool> UpdateRoleAsync(Guid internalUserProfileId, Guid garageId, Guid roleId, DateTime updatedAt);
+    Task<bool> RemoveAsync(Guid internalUserProfileId, Guid garageId);
 }
 
 public class GarageMembershipRepository : IGarageMembershipRepository
@@ -66,6 +70,55 @@ public class GarageMembershipRepository : IGarageMembershipRepository
             "SELECT COUNT(*) FROM internal_user_profiles_garages WHERE role_id = @role_id");
         cmd.Parameters.AddWithValue("role_id", roleId);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+    }
+
+    // How many members in a garage hold a role that grants the given scope, counting the wildcard
+    // as granting everything. Used by MembershipService's last-admin guard (e.g. "is this the last
+    // member who can still manage staff?").
+    public async Task<int> CountMembersWithScopeAsync(Guid garageId, string scope)
+    {
+        const string sql = @"
+            SELECT COUNT(*)
+            FROM internal_user_profiles_garages m
+            JOIN roles r ON r.id = m.role_id AND r.garage_id = m.garage_id
+            WHERE m.garage_id = @garage_id
+              AND (@scope = ANY(r.scopes) OR @wildcard = ANY(r.scopes))";
+
+        await using var cmd = _dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("garage_id", garageId);
+        cmd.Parameters.AddWithValue("scope", scope);
+        cmd.Parameters.AddWithValue("wildcard", Scope.Wildcard);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+    }
+
+    // Reassigns a member to a different role. Returns false when the member does not exist. The
+    // composite FK still guarantees the new role belongs to the same garage.
+    public async Task<bool> UpdateRoleAsync(Guid internalUserProfileId, Guid garageId, Guid roleId, DateTime updatedAt)
+    {
+        const string sql = @"
+            UPDATE internal_user_profiles_garages
+            SET role_id = @role_id, updated_at = @updated_at
+            WHERE internal_user_profile_id = @pid AND garage_id = @garage_id";
+
+        await using var cmd = _dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("pid", internalUserProfileId);
+        cmd.Parameters.AddWithValue("garage_id", garageId);
+        cmd.Parameters.AddWithValue("role_id", roleId);
+        cmd.Parameters.AddWithValue("updated_at", updatedAt);
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
+    // Removes a member from a garage. Returns false when there was no such membership.
+    public async Task<bool> RemoveAsync(Guid internalUserProfileId, Guid garageId)
+    {
+        const string sql = @"
+            DELETE FROM internal_user_profiles_garages
+            WHERE internal_user_profile_id = @pid AND garage_id = @garage_id";
+
+        await using var cmd = _dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("pid", internalUserProfileId);
+        cmd.Parameters.AddWithValue("garage_id", garageId);
+        return await cmd.ExecuteNonQueryAsync() > 0;
     }
 
     private static GarageMembershipEntity Map(NpgsqlDataReader r) => new()

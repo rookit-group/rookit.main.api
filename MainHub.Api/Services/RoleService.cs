@@ -41,7 +41,7 @@ public class RoleService(
         Guid garageId, string name, string? description,
         IReadOnlyList<string> scopes, IEnumerable<string> actorScopes)
     {
-        EnsureActorCanGrant(actorScopes, scopes);
+        PermissionGuard.EnsureCanGrant(actorScopes, scopes);
 
         var role = new RoleEntity
         {
@@ -72,7 +72,7 @@ public class RoleService(
             ?? throw new KeyNotFoundException($"Role with ID {roleId} not found.");
 
         EnsureNotSystemRole(role, "edited");
-        EnsureActorCanGrant(actorScopes, scopes);
+        PermissionGuard.EnsureCanGrant(actorScopes, scopes);
 
         role.Name = name;
         role.Description = description;
@@ -109,20 +109,6 @@ public class RoleService(
         {
             throw new InvalidOperationException(
                 $"'{role.Name}' is a system role and cannot be {verb}.");
-        }
-    }
-
-    // Escalation guard: every requested scope must be granted by the actor's own scopes. Because
-    // Scope.Grants treats the wildcard as granting everything, only a wildcard holder (an owner)
-    // can create/edit a wildcard role; a partial admin can never grant beyond what they hold.
-    private static void EnsureActorCanGrant(IEnumerable<string> actorScopes, IReadOnlyList<string> requestedScopes)
-    {
-        var held = actorScopes as ICollection<string> ?? actorScopes.ToList();
-        var notPermitted = requestedScopes.Where(s => !Scope.Grants(held, s)).Distinct().ToList();
-        if (notPermitted.Count > 0)
-        {
-            throw new UnauthorizedAccessException(
-                $"You cannot grant scope(s) you do not hold: {string.Join(", ", notPermitted)}.");
         }
     }
 }

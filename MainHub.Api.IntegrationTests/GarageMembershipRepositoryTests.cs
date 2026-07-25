@@ -1,3 +1,4 @@
+using MainHub.Api.Authorization;
 using MainHub.Api.Repositories;
 using Npgsql;
 using Xunit;
@@ -129,5 +130,99 @@ public class GarageMembershipRepositoryTests : IAsyncLifetime
 
         var ex = await Assert.ThrowsAsync<PostgresException>(() => _sut.AddAsync(membership));
         Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, ex.SqlState);
+    }
+
+    // ----- CountMembersWithScope -----
+
+    [Fact]
+    public async Task CountMembersWithScope_counts_exact_scope_and_wildcard_holders()
+    {
+        var garage = Factories.Garage();
+        await _garages.CreateAsync(garage);
+
+        // Member 1: a role that explicitly grants staff:manage.
+        await AddMemberAsync(garage.Id, Factories.Role(garage.Id, name: "Manager", scopes: [Scope.StaffManage]));
+        // Member 2: the wildcard (owner) role - counts because '*' grants everything.
+        await AddMemberAsync(garage.Id, Factories.Role(garage.Id, name: "Owner", scopes: [Scope.Wildcard], isSystem: true));
+        // Member 3: a read-only role that does NOT grant staff:manage - excluded.
+        await AddMemberAsync(garage.Id, Factories.Role(garage.Id, name: "Viewer", scopes: [Scope.StaffRead]));
+
+        Assert.Equal(2, await _sut.CountMembersWithScopeAsync(garage.Id, Scope.StaffManage));
+    }
+
+    [Fact]
+    public async Task CountMembersWithScope_is_scoped_to_the_garage()
+    {
+        var garageA = Factories.Garage();
+        await _garages.CreateAsync(garageA);
+        var garageB = Factories.Garage();
+        await _garages.CreateAsync(garageB);
+
+        await AddMemberAsync(garageA.Id, Factories.Role(garageA.Id, name: "Manager", scopes: [Scope.StaffManage]));
+        await AddMemberAsync(garageB.Id, Factories.Role(garageB.Id, name: "Manager", scopes: [Scope.StaffManage]));
+
+        Assert.Equal(1, await _sut.CountMembersWithScopeAsync(garageA.Id, Scope.StaffManage));
+    }
+
+    // ----- UpdateRole -----
+
+    [Fact]
+    public async Task UpdateRole_reassigns_member_and_returns_true()
+    {
+        var (profileId, garageId, roleId) = await SeedMembershipPrerequisitesAsync();
+        await _sut.AddAsync(Factories.GarageMembership(profileId, garageId, roleId, updatedAt: null));
+        var newRole = Factories.Role(garageId, name: "New Role");
+        await _roles.CreateAsync(newRole);
+        var updatedAt = new DateTime(2026, 7, 8, 9, 10, 11, DateTimeKind.Utc);
+
+        var changed = await _sut.UpdateRoleAsync(profileId, garageId, newRole.Id, updatedAt);
+
+        Assert.True(changed);
+        var fetched = await _sut.GetAsync(profileId, garageId);
+        Assert.NotNull(fetched);
+        Assert.Equal(newRole.Id, fetched!.RoleId);
+        Assert.Equal(updatedAt, fetched.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task UpdateRole_returns_false_when_member_missing()
+    {
+        var (_, garageId, roleId) = await SeedMembershipPrerequisitesAsync();
+
+        var changed = await _sut.UpdateRoleAsync(Guid.NewGuid(), garageId, roleId, DateTime.UtcNow);
+
+        Assert.False(changed);
+    }
+
+    // ----- Remove -----
+
+    [Fact]
+    public async Task Remove_deletes_membership_and_returns_true()
+    {
+        var (profileId, garageId, roleId) = await SeedMembershipPrerequisitesAsync();
+        await _sut.AddAsync(Factories.GarageMembership(profileId, garageId, roleId));
+
+        var removed = await _sut.RemoveAsync(profileId, garageId);
+
+        Assert.True(removed);
+        Assert.Null(await _sut.GetAsync(profileId, garageId));
+    }
+
+    [Fact]
+    public async Task Remove_returns_false_when_member_missing()
+    {
+        var removed = await _sut.RemoveAsync(Guid.NewGuid(), Guid.NewGuid());
+        Assert.False(removed);
+    }
+
+    // Creates a fresh user + internal profile in the given garage on the supplied role.
+    private async Task AddMemberAsync(Guid garageId, MainHub.Api.Models.RoleEntity role)
+    {
+        var user = Factories.User();
+        await _users.CreateAsync(user);
+        var profile = Factories.InternalUserProfile(user.Id);
+        await _profiles.CreateAsync(profile);
+        await _roles.CreateAsync(role);
+        await _sut.AddAsync(Factories.GarageMembership(profile.Id, garageId, role.Id));
     }
 }
