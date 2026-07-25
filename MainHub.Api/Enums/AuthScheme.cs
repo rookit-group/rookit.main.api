@@ -7,6 +7,7 @@ namespace MainHub.Api.Enums;
 public enum AuthScheme
 {
   MobileJwt,
-  WebJwt,
+  InternalIdentityJwt,
+  GarageJwt,
   AdminJwt
 }

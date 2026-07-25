@@ -133,7 +133,6 @@ public class GarageMembershipRepositoryTests : IAsyncLifetime
     }
 
     // ----- CountMembersWithScope -----
-
     [Fact]
     public async Task CountMembersWithScope_counts_exact_scope_and_wildcard_holders()
     {
@@ -213,6 +212,64 @@ public class GarageMembershipRepositoryTests : IAsyncLifetime
     {
         var removed = await _sut.RemoveAsync(Guid.NewGuid(), Guid.NewGuid());
         Assert.False(removed);
+    }
+
+    // ----- GetMemberScopes -----
+
+    [Fact]
+    public async Task GetMemberScopes_returns_the_members_role_scopes()
+    {
+        var user = Factories.User();
+        await _users.CreateAsync(user);
+        var profile = Factories.InternalUserProfile(user.Id);
+        await _profiles.CreateAsync(profile);
+        var garage = Factories.Garage();
+        await _garages.CreateAsync(garage);
+        var role = Factories.Role(garage.Id, scopes: [Scope.StaffRead, Scope.GarageManage]);
+        await _roles.CreateAsync(role);
+        await _sut.AddAsync(Factories.GarageMembership(profile.Id, garage.Id, role.Id));
+
+        var scopes = await _sut.GetMemberScopesAsync(user.Id, garage.Id);
+
+        Assert.NotNull(scopes);
+        Assert.Equal(new[] { Scope.StaffRead, Scope.GarageManage }, scopes);
+    }
+
+    [Fact]
+    public async Task GetMemberScopes_returns_null_when_user_is_not_a_member()
+    {
+        var user = Factories.User();
+        await _users.CreateAsync(user);
+        var garage = Factories.Garage();
+        await _garages.CreateAsync(garage);
+
+        // User exists but has no profile/membership in this garage.
+        Assert.Null(await _sut.GetMemberScopesAsync(user.Id, garage.Id));
+    }
+
+    [Fact]
+    public async Task GetMemberScopes_is_scoped_to_the_requested_garage()
+    {
+        var user = Factories.User();
+        await _users.CreateAsync(user);
+        var profile = Factories.InternalUserProfile(user.Id);
+        await _profiles.CreateAsync(profile);
+
+        var garageA = Factories.Garage();
+        await _garages.CreateAsync(garageA);
+        var roleA = Factories.Role(garageA.Id, name: "A", scopes: [Scope.StaffRead]);
+        await _roles.CreateAsync(roleA);
+        await _sut.AddAsync(Factories.GarageMembership(profile.Id, garageA.Id, roleA.Id));
+
+        var garageB = Factories.Garage();
+        await _garages.CreateAsync(garageB);
+        var roleB = Factories.Role(garageB.Id, name: "B", scopes: [Scope.Wildcard]);
+        await _roles.CreateAsync(roleB);
+        await _sut.AddAsync(Factories.GarageMembership(profile.Id, garageB.Id, roleB.Id));
+
+        // Same user, different garages -> different scopes.
+        Assert.Equal(new[] { Scope.StaffRead }, await _sut.GetMemberScopesAsync(user.Id, garageA.Id));
+        Assert.Equal(new[] { Scope.Wildcard }, await _sut.GetMemberScopesAsync(user.Id, garageB.Id));
     }
 
     // Creates a fresh user + internal profile in the given garage on the supplied role.

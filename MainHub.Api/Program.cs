@@ -23,8 +23,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<JwtSettings>(
     builder.Configuration.GetSection("JwtSettings")
 );
-builder.Services.Configure<WebJwtSettings>(
-    builder.Configuration.GetSection("WebJwtSettings")
+builder.Services.Configure<InternalIdentityJwtSettings>(
+    builder.Configuration.GetSection("InternalIdentityJwtSettings")
+);
+builder.Services.Configure<GarageJwtSettings>(
+    builder.Configuration.GetSection("GarageJwtSettings")
 );
 builder.Services.Configure<AdminJwtSettings>(
     builder.Configuration.GetSection("AdminJwtSettings")
@@ -185,10 +188,16 @@ if (mobileJwtSettings == null || string.IsNullOrEmpty(mobileJwtSettings.SecretKe
     throw new InvalidOperationException("JwtSettings or SecretKey is not configured properly.");
 }
 
-var webJwtSettings = builder.Configuration.GetSection("WebJwtSettings").Get<WebJwtSettings>();
-if (webJwtSettings == null || string.IsNullOrEmpty(webJwtSettings.SecretKey))
+var internalIdentityJwtSettings = builder.Configuration.GetSection("InternalIdentityJwtSettings").Get<InternalIdentityJwtSettings>();
+if (internalIdentityJwtSettings == null || string.IsNullOrEmpty(internalIdentityJwtSettings.SecretKey))
 {
-    throw new InvalidOperationException("WebJwtSettings or SecretKey is not configured properly.");
+    throw new InvalidOperationException("InternalIdentityJwtSettings or SecretKey is not configured properly.");
+}
+
+var garageJwtSettings = builder.Configuration.GetSection("GarageJwtSettings").Get<GarageJwtSettings>();
+if (garageJwtSettings == null || string.IsNullOrEmpty(garageJwtSettings.SecretKey))
+{
+    throw new InvalidOperationException("GarageJwtSettings or SecretKey is not configured properly.");
 }
 
 var adminJwtSettings = builder.Configuration.GetSection("AdminJwtSettings").Get<AdminJwtSettings>();
@@ -198,7 +207,8 @@ if (adminJwtSettings == null || string.IsNullOrEmpty(adminJwtSettings.SecretKey)
 }
 
 var mobileJwtSecretKey = Encoding.UTF8.GetBytes(mobileJwtSettings.SecretKey);
-var webJwtSecretKey = Encoding.UTF8.GetBytes(webJwtSettings.SecretKey);
+var internalIdentityJwtSecretKey = Encoding.UTF8.GetBytes(internalIdentityJwtSettings.SecretKey);
+var garageJwtSecretKey = Encoding.UTF8.GetBytes(garageJwtSettings.SecretKey);
 var adminJwtSecretKey = Encoding.UTF8.GetBytes(adminJwtSettings.SecretKey);
 
 // 🟦 Authentication Configuration
@@ -223,7 +233,7 @@ builder.Services
             ClockSkew = TimeSpan.Zero // Remove delay of expiration validation
         };
     })
-    .AddJwtBearer(nameof(AuthScheme.WebJwt), options =>
+    .AddJwtBearer(nameof(AuthScheme.InternalIdentityJwt), options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -231,9 +241,23 @@ builder.Services
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = webJwtSettings.Issuer,
-            ValidAudience = webJwtSettings.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(webJwtSecretKey),
+            ValidIssuer = internalIdentityJwtSettings.Issuer,
+            ValidAudience = internalIdentityJwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(internalIdentityJwtSecretKey),
+            ClockSkew = TimeSpan.Zero // Remove delay of expiration validation
+        };
+    })
+    .AddJwtBearer(nameof(AuthScheme.GarageJwt), options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = garageJwtSettings.Issuer,
+            ValidAudience = garageJwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(garageJwtSecretKey),
             ClockSkew = TimeSpan.Zero // Remove delay of expiration validation
         };
     })
@@ -261,9 +285,15 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAuthenticatedUser();
     });
 
-    options.AddPolicy(nameof(AuthPolicy.RequireWebJwt), policy =>
+    options.AddPolicy(nameof(AuthPolicy.RequireInternalIdentityJwt), policy =>
     {
-        policy.AuthenticationSchemes.Add(nameof(AuthScheme.WebJwt));
+        policy.AuthenticationSchemes.Add(nameof(AuthScheme.InternalIdentityJwt));
+        policy.RequireAuthenticatedUser();
+    });
+
+    options.AddPolicy(nameof(AuthPolicy.RequireGarageJwt), policy =>
+    {
+        policy.AuthenticationSchemes.Add(nameof(AuthScheme.GarageJwt));
         policy.RequireAuthenticatedUser();
     });
 

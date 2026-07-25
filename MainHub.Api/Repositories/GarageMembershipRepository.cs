@@ -14,6 +14,7 @@ public interface IGarageMembershipRepository
     Task<GarageMembershipEntity?> GetAsync(Guid internalUserProfileId, Guid garageId);
     Task<int> CountByRoleAsync(Guid roleId);
     Task<int> CountMembersWithScopeAsync(Guid garageId, string scope);
+    Task<IReadOnlyList<string>?> GetMemberScopesAsync(Guid userId, Guid garageId);
     Task<bool> UpdateRoleAsync(Guid internalUserProfileId, Guid garageId, Guid roleId, DateTime updatedAt);
     Task<bool> RemoveAsync(Guid internalUserProfileId, Guid garageId);
 }
@@ -89,6 +90,31 @@ public class GarageMembershipRepository : IGarageMembershipRepository
         cmd.Parameters.AddWithValue("scope", scope);
         cmd.Parameters.AddWithValue("wildcard", Scope.Wildcard);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+    }
+
+    // Resolves the effective scopes a user holds within a garage in one round trip, by walking
+    // user -> internal profile -> membership -> role. Returns null when the user is NOT a member of
+    // the garage (so the token layer can refuse to mint a garage token); returns the role's scope
+    // list otherwise (which may be empty). This is the resolver PermissionService calls at token
+    // mint/refresh time.
+    public async Task<IReadOnlyList<string>?> GetMemberScopesAsync(Guid userId, Guid garageId)
+    {
+        const string sql = @"
+            SELECT r.scopes
+            FROM internal_user_profiles p
+            JOIN internal_user_profiles_garages m ON m.internal_user_profile_id = p.id
+            JOIN roles r ON r.id = m.role_id AND r.garage_id = m.garage_id
+            WHERE p.user_id = @user_id AND m.garage_id = @garage_id";
+
+        await using var cmd = _dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("user_id", userId);
+        cmd.Parameters.AddWithValue("garage_id", garageId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+        {
+            return null;
+        }
+        return reader.GetNullableStringList(0) ?? [];
     }
 
     // Reassigns a member to a different role. Returns false when the member does not exist. The
