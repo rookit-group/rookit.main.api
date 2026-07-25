@@ -27,3 +27,14 @@ generated package.
 
 When adding or changing anything under `Shared.Contracts/**`, follow
 [.github/instructions/shared-contracts.instructions.md](instructions/shared-contracts.instructions.md).
+
+## Authorization / RBAC
+
+Internal (company-staff) access uses a per-garage, **scope-based RBAC** on a
+two-stage JWT flow (`InternalIdentityJwt` → `GarageJwt`). Scopes are code, roles
+are data. Before touching anything under `MainHub.Api/Authorization/**`,
+garage-scoped endpoints, or their services/repositories, read
+[.github/instructions/rbac-authorization.instructions.md](instructions/rbac-authorization.instructions.md).
+
+For a visual/onboarding overview (token flow, request pipeline, data model,
+guards), see [docs/rbac-overview.md](../docs/rbac-overview.md).
