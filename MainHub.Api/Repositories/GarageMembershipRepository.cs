@@ -9,7 +9,7 @@ namespace MainHub.Api.Repositories;
 // than speculatively.
 public interface IGarageMembershipRepository
 {
-    Task AddAsync(GarageMembershipEntity membership);
+    Task AddAsync(GarageMembershipEntity membership, NpgsqlConnection? connection = null);
     Task<GarageMembershipEntity?> GetAsync(Guid internalUserProfileId, Guid garageId);
 }
 
@@ -25,14 +25,19 @@ public class GarageMembershipRepository : IGarageMembershipRepository
         _dataSource = dataSource;
     }
 
-    public async Task AddAsync(GarageMembershipEntity membership)
+    // When a connection is supplied the command runs on it (and therefore inside any open
+    // transaction on that connection); otherwise it uses the pooled data source and auto-commits.
+    private NpgsqlCommand CreateCommand(string sql, NpgsqlConnection? connection)
+        => connection is not null ? new NpgsqlCommand(sql, connection) : _dataSource.CreateCommand(sql);
+
+    public async Task AddAsync(GarageMembershipEntity membership, NpgsqlConnection? connection = null)
     {
         const string sql = @"
             INSERT INTO internal_user_profiles_garages
                 (internal_user_profile_id, garage_id, role_id, created_at, updated_at)
             VALUES (@pid, @garage_id, @role_id, @created_at, @updated_at)";
 
-        await using var cmd = _dataSource.CreateCommand(sql);
+        await using var cmd = CreateCommand(sql, connection);
         cmd.Parameters.AddWithValue("pid", membership.InternalUserProfileId);
         cmd.Parameters.AddWithValue("garage_id", membership.GarageId);
         cmd.Parameters.AddWithValue("role_id", membership.RoleId);

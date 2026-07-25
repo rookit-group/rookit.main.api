@@ -10,7 +10,7 @@ namespace MainHub.Api.Repositories;
 // than speculatively.
 public interface IRoleRepository
 {
-    Task CreateAsync(RoleEntity role);
+    Task CreateAsync(RoleEntity role, NpgsqlConnection? connection = null);
     Task<RoleEntity?> GetByIdAsync(Guid id);
 }
 
@@ -25,13 +25,18 @@ public class RoleRepository : IRoleRepository
         _dataSource = dataSource;
     }
 
-    public async Task CreateAsync(RoleEntity role)
+    // When a connection is supplied the command runs on it (and therefore inside any open
+    // transaction on that connection); otherwise it uses the pooled data source and auto-commits.
+    private NpgsqlCommand CreateCommand(string sql, NpgsqlConnection? connection)
+        => connection is not null ? new NpgsqlCommand(sql, connection) : _dataSource.CreateCommand(sql);
+
+    public async Task CreateAsync(RoleEntity role, NpgsqlConnection? connection = null)
     {
         const string sql = @"
             INSERT INTO roles (id, garage_id, name, description, scopes, created_at, updated_at)
             VALUES (@id, @garage_id, @name, @description, @scopes, @created_at, @updated_at)";
 
-        await using var cmd = _dataSource.CreateCommand(sql);
+        await using var cmd = CreateCommand(sql, connection);
         cmd.Parameters.AddWithValue("id", role.Id);
         cmd.Parameters.AddWithValue("garage_id", role.GarageId);
         cmd.Parameters.AddWithValue("name", role.Name);
