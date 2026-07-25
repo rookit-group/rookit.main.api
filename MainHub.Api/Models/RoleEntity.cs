@@ -19,6 +19,10 @@ public class RoleEntity
     // or the wildcard "*" for a full-admin role (the seeded Owner role holds exactly ["*"]).
     public required List<string> Scopes { get; set; }
 
+    // True for platform-seeded, immutable roles (currently only the per-garage "Owner" role).
+    // The service refuses to edit or delete a system role. User-created roles are false.
+    public bool IsSystem { get; set; }
+
     public required DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

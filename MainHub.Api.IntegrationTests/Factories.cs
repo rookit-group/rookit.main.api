@@ -170,6 +170,7 @@ internal static class Factories
         string name = "Mechanic",
         string? description = "Handles repairs",
         List<string>? scopes = null,
+        bool isSystem = false,
         DateTime? createdAt = null,
         DateTime? updatedAt = null) => new()
         {
@@ -178,6 +179,7 @@ internal static class Factories
             Name = name,
             Description = description,
             Scopes = scopes ?? [Scope.StaffRead, Scope.GarageRead],
+            IsSystem = isSystem,
             CreatedAt = createdAt ?? BaseUtc,
             UpdatedAt = updatedAt,
         };

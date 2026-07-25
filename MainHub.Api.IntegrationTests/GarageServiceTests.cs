@@ -58,6 +58,7 @@ public class GarageServiceTests : IAsyncLifetime
         Assert.Equal(GarageService.OwnerRoleName, role!.Name);
         Assert.Equal(garage.Id, role.GarageId);
         Assert.Equal(new[] { Scope.Wildcard }, role.Scopes);
+        Assert.True(role.IsSystem);
 
         var membership = await _memberships.GetAsync(profileId, garage.Id);
         Assert.NotNull(membership);

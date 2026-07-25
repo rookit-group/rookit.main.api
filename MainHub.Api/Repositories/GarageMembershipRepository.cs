@@ -11,6 +11,7 @@ public interface IGarageMembershipRepository
 {
     Task AddAsync(GarageMembershipEntity membership, NpgsqlConnection? connection = null);
     Task<GarageMembershipEntity?> GetAsync(Guid internalUserProfileId, Guid garageId);
+    Task<int> CountByRoleAsync(Guid roleId);
 }
 
 public class GarageMembershipRepository : IGarageMembershipRepository
@@ -55,6 +56,16 @@ public class GarageMembershipRepository : IGarageMembershipRepository
         cmd.Parameters.AddWithValue("garage_id", garageId);
         await using var reader = await cmd.ExecuteReaderAsync();
         return await reader.ReadAsync() ? Map(reader) : null;
+    }
+
+    // How many members currently hold this role. Used by RoleService to block deleting a role
+    // that is still assigned (the friendly guard in front of the DB's ON DELETE NO ACTION FK).
+    public async Task<int> CountByRoleAsync(Guid roleId)
+    {
+        await using var cmd = _dataSource.CreateCommand(
+            "SELECT COUNT(*) FROM internal_user_profiles_garages WHERE role_id = @role_id");
+        cmd.Parameters.AddWithValue("role_id", roleId);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync());
     }
 
     private static GarageMembershipEntity Map(NpgsqlDataReader r) => new()

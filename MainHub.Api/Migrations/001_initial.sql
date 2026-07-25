@@ -82,10 +82,13 @@ CREATE TABLE IF NOT EXISTS roles (
     -- a member of the code-defined scope catalog (see Authorization/Scope.cs), e.g.
     -- {"staff:manage","staff:read"}, or the wildcard '*' meaning "every scope, including ones
     -- added in the future". The Owner role seeded on garage creation holds exactly {'*'}, so it
-    -- never needs re-seeding when new scopes are introduced. There is no is_owner flag: an owner
-    -- is simply a member whose role grants the admin scopes (which '*' satisfies). Lockout is
-    -- prevented by a runtime guard (never demote/remove the last admin), not by the schema.
+    -- never needs re-seeding when new scopes are introduced.
     scopes      text[]      NOT NULL,
+    -- Marks a system-provided role that the platform seeds and owns (currently just the per-garage
+    -- "Owner" role). System roles are immutable: the service refuses to edit or delete them, so an
+    -- owner can never accidentally strip the Owner role's scopes and lock the garage out. User-
+    -- created roles have is_system = false and are fully editable/deletable.
+    is_system   boolean     NOT NULL DEFAULT false,
     -- When this role was created
     created_at  timestamptz NOT NULL,
     -- When this role was last updated

@@ -48,7 +48,9 @@ public class GarageService(
         };
 
         // The owner role holds the wildcard scope, so it covers every current and future scope
-        // without ever needing a re-seed when new scopes are introduced.
+        // without ever needing a re-seed when new scopes are introduced. It is marked IsSystem so
+        // the platform owns it: RoleService refuses to edit or delete it, which prevents an owner
+        // from ever stripping its scopes and locking the garage out.
         var ownerRole = new RoleEntity
         {
             Id = Guid.NewGuid(),
@@ -56,6 +58,7 @@ public class GarageService(
             Name = OwnerRoleName,
             Description = OwnerRoleDescription,
             Scopes = [Scope.Wildcard],
+            IsSystem = true,
             CreatedAt = now,
             UpdatedAt = null,
         };

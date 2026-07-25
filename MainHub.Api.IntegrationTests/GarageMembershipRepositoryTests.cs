@@ -82,6 +82,35 @@ public class GarageMembershipRepositoryTests : IAsyncLifetime
         Assert.Null(missing);
     }
 
+    [Fact]
+    public async Task CountByRole_counts_only_members_holding_that_role()
+    {
+        var (profileId, garageId, roleId) = await SeedMembershipPrerequisitesAsync();
+        await _sut.AddAsync(Factories.GarageMembership(profileId, garageId, roleId));
+
+        // A second member in the same garage on a DIFFERENT role must not be counted.
+        var otherUser = Factories.User();
+        await _users.CreateAsync(otherUser);
+        var otherProfile = Factories.InternalUserProfile(otherUser.Id);
+        await _profiles.CreateAsync(otherProfile);
+        var otherRole = Factories.Role(garageId, name: "Second Role");
+        await _roles.CreateAsync(otherRole);
+        await _sut.AddAsync(Factories.GarageMembership(otherProfile.Id, garageId, otherRole.Id));
+
+        Assert.Equal(1, await _sut.CountByRoleAsync(roleId));
+        Assert.Equal(1, await _sut.CountByRoleAsync(otherRole.Id));
+    }
+
+    [Fact]
+    public async Task CountByRole_returns_zero_when_role_unused()
+    {
+        var (_, garageId, _) = await SeedMembershipPrerequisitesAsync();
+        var unusedRole = Factories.Role(garageId, name: "Unused");
+        await _roles.CreateAsync(unusedRole);
+
+        Assert.Equal(0, await _sut.CountByRoleAsync(unusedRole.Id));
+    }
+
     // Schema guard: the composite FK (role_id, garage_id) -> roles(id, garage_id) must reject a
     // role that belongs to a DIFFERENT garage, so a role assignment can never cross garages.
     [Fact]
