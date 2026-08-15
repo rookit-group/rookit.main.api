@@ -346,7 +346,6 @@ app.MapAuthEndpoints();
 app.MapGarageEndpoints();
 app.MapRoleEndpoints();
 app.MapStaffEndpoints();
-app.MapMeEndpoints();
 app.MapUserEndpoints();
 app.MapVehicleEndpoints();
 app.MapServiceHistoryEndpoints();
