@@ -25,7 +25,7 @@ public class GarageServiceTests : IAsyncLifetime
         _garages = new GarageRepository(fixture.DataSource);
         _roles = new RoleRepository(fixture.DataSource);
         _memberships = new GarageMembershipRepository(fixture.DataSource);
-        var roleService = new RoleService(_roles, _memberships);
+        var roleService = new RoleService(_roles);
         _sut = new GarageService(fixture.DataSource, _garages, roleService, _memberships);
     }
 

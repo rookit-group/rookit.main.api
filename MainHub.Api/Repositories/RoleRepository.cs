@@ -14,8 +14,6 @@ public interface IRoleRepository
     Task CreateManyAsync(IReadOnlyList<RoleEntity> roles, NpgsqlConnection? connection = null);
     Task<RoleEntity?> GetByIdAsync(Guid id);
     Task<List<RoleEntity>> ListByGarageAsync(Guid garageId);
-    Task<bool> UpdateAsync(RoleEntity role);
-    Task<bool> DeleteAsync(Guid id);
 }
 
 public class RoleRepository : IRoleRepository
@@ -110,35 +108,6 @@ public class RoleRepository : IRoleRepository
         var roles = new List<RoleEntity>();
         while (await reader.ReadAsync()) roles.Add(Map(reader));
         return roles;
-    }
-
-    // Updates the mutable fields of a role (garage_id is immutable). Returns false when no row
-    // matched, letting the service surface a not-found.
-    public async Task<bool> UpdateAsync(RoleEntity role)
-    {
-        const string sql = @"
-            UPDATE roles
-            SET name = @name, description = @description, scopes = @scopes, updated_at = @updated_at
-            WHERE id = @id";
-
-        await using var cmd = _dataSource.CreateCommand(sql);
-        cmd.Parameters.AddWithValue("id", role.Id);
-        cmd.Parameters.AddWithValue("name", role.Name);
-        cmd.Parameters.AddWithValue("description", NpgsqlReaderExtensions.NullableParam(role.Description));
-        cmd.Parameters.Add(new NpgsqlParameter("scopes", NpgsqlDbType.Array | NpgsqlDbType.Text)
-        { Value = role.Scopes.ToArray() });
-        cmd.Parameters.AddWithValue("updated_at", NpgsqlReaderExtensions.NullableParam(role.UpdatedAt));
-        return await cmd.ExecuteNonQueryAsync() > 0;
-    }
-
-    // Deletes a role by id. Returns false when no row matched. Note: the DB's composite FK
-    // (ON DELETE NO ACTION) still blocks deleting a role that a member holds; the service checks
-    // that first to give a friendly error, this is the physical delete once that guard passes.
-    public async Task<bool> DeleteAsync(Guid id)
-    {
-        await using var cmd = _dataSource.CreateCommand("DELETE FROM roles WHERE id = @id");
-        cmd.Parameters.AddWithValue("id", id);
-        return await cmd.ExecuteNonQueryAsync() > 0;
     }
 
     private static RoleEntity Map(NpgsqlDataReader r) => new()

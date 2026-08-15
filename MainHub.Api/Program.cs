@@ -148,7 +148,6 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateVehicleDtoValidator>(
 builder.Services.AddValidatorsFromAssemblyContaining<UpdateVehicleDtoValidator>();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateServiceHistoryDetailsDtoValidator>();
 builder.Services.AddValidatorsFromAssemblyContaining<CreateServiceHistoryRecordDtoValidator>();
-builder.Services.AddValidatorsFromAssemblyContaining<CreateRoleDtoValidator>();
 
 // 🟦 Add controllers and Swagger
 builder.Services.AddEndpointsApiExplorer();

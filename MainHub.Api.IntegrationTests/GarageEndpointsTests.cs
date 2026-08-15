@@ -56,7 +56,7 @@ public class GarageEndpointsTests : IAsyncLifetime
             _garageOptions);
 
         _permissionService = new PermissionService(_memberships);
-        var roleService = new RoleService(_roles, _memberships);
+        var roleService = new RoleService(_roles);
         _garageService = new GarageService(fixture.DataSource, _garages, roleService, _memberships);
     }
 
