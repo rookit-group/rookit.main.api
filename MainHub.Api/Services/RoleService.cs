@@ -1,6 +1,7 @@
 using MainHub.Api.Authorization;
 using MainHub.Api.Models;
 using MainHub.Api.Repositories;
+using Npgsql;
 
 namespace MainHub.Api.Services;
 
@@ -9,6 +10,8 @@ public interface IRoleService
     Task<RoleEntity> CreateAsync(
         Guid garageId, string name, string? description,
         IReadOnlyList<string> scopes, IEnumerable<string> actorScopes);
+
+    Task CreateManyAsync(IReadOnlyList<RoleEntity> roles, NpgsqlConnection? connection = null);
 
     Task<List<RoleEntity>> ListByGarageAsync(Guid garageId);
 
@@ -34,6 +37,11 @@ public class RoleService(
 {
     private readonly IRoleRepository _roleRepository = roleRepository;
     private readonly IGarageMembershipRepository _membershipRepository = membershipRepository;
+
+    public async Task CreateManyAsync(IReadOnlyList<RoleEntity> roles, NpgsqlConnection? connection = null)
+    {
+        await _roleRepository.CreateManyAsync(roles, connection);
+    }
 
     public async Task<RoleEntity> CreateAsync(
         Guid garageId, string name, string? description,

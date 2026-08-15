@@ -25,7 +25,8 @@ public class GarageServiceTests : IAsyncLifetime
         _garages = new GarageRepository(fixture.DataSource);
         _roles = new RoleRepository(fixture.DataSource);
         _memberships = new GarageMembershipRepository(fixture.DataSource);
-        _sut = new GarageService(fixture.DataSource, _garages, _roles, _memberships);
+        var roleService = new RoleService(_roles, _memberships);
+        _sut = new GarageService(fixture.DataSource, _garages, roleService, _memberships);
     }
 
     public Task InitializeAsync() => _fixture.ResetAsync();
@@ -55,7 +56,7 @@ public class GarageServiceTests : IAsyncLifetime
 
         var role = await _roles.GetByIdAsync(result.OwnerRole.Id);
         Assert.NotNull(role);
-        Assert.Equal(GarageService.OwnerRoleName, role!.Name);
+        Assert.Equal("Owner", role!.Name);
         Assert.Equal(garage.Id, role.GarageId);
         Assert.Equal(new[] { Scope.Wildcard }, role.Scopes);
         Assert.True(role.IsSystem);
@@ -78,6 +79,30 @@ public class GarageServiceTests : IAsyncLifetime
         {
             Assert.True(Scope.Grants(result.OwnerRole.Scopes, scope));
         }
+    }
+
+    // A brand-new garage ships with starter roles so it is immediately usable: the system Owner
+    // role plus ordinary (non-system) Manager and Mechanic roles the owner can later tweak.
+    [Fact]
+    public async Task Create_seeds_default_manager_and_mechanic_roles()
+    {
+        var profileId = await SeedInternalProfileAsync();
+
+        var result = await _sut.CreateAsync("Downtown Motors", profileId);
+
+        var roles = await _roles.ListByGarageAsync(result.Garage.Id);
+        Assert.Equal(3, roles.Count);
+
+        var manager = Assert.Single(roles, r => r.Name == "Manager");
+        Assert.False(manager.IsSystem);
+        Assert.Equal(new[] { Scope.GarageRead, Scope.StaffRead }, manager.Scopes);
+
+        var mechanic = Assert.Single(roles, r => r.Name == "Mechanic");
+        Assert.False(mechanic.IsSystem);
+        Assert.Equal(new[] { Scope.GarageRead }, mechanic.Scopes);
+
+        // All three starter roles belong to the new garage.
+        Assert.All(roles, r => Assert.Equal(result.Garage.Id, r.GarageId));
     }
 
     // Rollback guard: a non-existent owner profile makes the membership INSERT fail its FK. The

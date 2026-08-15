@@ -11,6 +11,7 @@ namespace MainHub.Api.Repositories;
 public interface IRoleRepository
 {
     Task CreateAsync(RoleEntity role, NpgsqlConnection? connection = null);
+    Task CreateManyAsync(IReadOnlyList<RoleEntity> roles, NpgsqlConnection? connection = null);
     Task<RoleEntity?> GetByIdAsync(Guid id);
     Task<List<RoleEntity>> ListByGarageAsync(Guid garageId);
     Task<bool> UpdateAsync(RoleEntity role);
@@ -50,6 +51,44 @@ public class RoleRepository : IRoleRepository
         cmd.Parameters.AddWithValue("created_at", role.CreatedAt);
         cmd.Parameters.AddWithValue("updated_at", NpgsqlReaderExtensions.NullableParam(role.UpdatedAt));
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    // Bulk-inserts roles in a single round-trip via a batch. When a connection is supplied every
+    // command runs on it (inside any open transaction); otherwise a dedicated connection is opened
+    // so the batch is atomic. A no-op for an empty list.
+    public async Task CreateManyAsync(IReadOnlyList<RoleEntity> roles, NpgsqlConnection? connection = null)
+    {
+        if (roles.Count == 0) return;
+
+        const string sql = @"
+            INSERT INTO roles (id, garage_id, name, description, scopes, is_system, created_at, updated_at)
+            VALUES (@id, @garage_id, @name, @description, @scopes, @is_system, @created_at, @updated_at)";
+
+        var ownsConnection = connection is null;
+        var conn = connection ?? await _dataSource.OpenConnectionAsync();
+        try
+        {
+            await using var batch = new NpgsqlBatch(conn);
+            foreach (var role in roles)
+            {
+                var command = new NpgsqlBatchCommand(sql);
+                command.Parameters.AddWithValue("id", role.Id);
+                command.Parameters.AddWithValue("garage_id", role.GarageId);
+                command.Parameters.AddWithValue("name", role.Name);
+                command.Parameters.AddWithValue("description", NpgsqlReaderExtensions.NullableParam(role.Description));
+                command.Parameters.Add(new NpgsqlParameter("scopes", NpgsqlDbType.Array | NpgsqlDbType.Text)
+                { Value = role.Scopes.ToArray() });
+                command.Parameters.AddWithValue("is_system", role.IsSystem);
+                command.Parameters.AddWithValue("created_at", role.CreatedAt);
+                command.Parameters.AddWithValue("updated_at", NpgsqlReaderExtensions.NullableParam(role.UpdatedAt));
+                batch.BatchCommands.Add(command);
+            }
+            await batch.ExecuteNonQueryAsync();
+        }
+        finally
+        {
+            if (ownsConnection) await conn.DisposeAsync();
+        }
     }
 
     public async Task<RoleEntity?> GetByIdAsync(Guid id)

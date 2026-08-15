@@ -104,6 +104,37 @@ public class RoleRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CreateMany_inserts_all_roles()
+    {
+        var garage = Factories.Garage();
+        await _garages.CreateAsync(garage);
+
+        var owner = Factories.Role(garage.Id, name: "Owner", scopes: [Scope.Wildcard], isSystem: true);
+        var mechanic = Factories.Role(garage.Id, name: "Mechanic", scopes: [Scope.StaffRead]);
+        var advisor = Factories.Role(garage.Id, name: "Advisor", description: null, scopes: [], updatedAt: null);
+
+        await _sut.CreateManyAsync([owner, mechanic, advisor]);
+
+        Assert.Equal(new[] { Scope.Wildcard }, (await _sut.GetByIdAsync(owner.Id))!.Scopes);
+        Assert.Equal(new[] { Scope.StaffRead }, (await _sut.GetByIdAsync(mechanic.Id))!.Scopes);
+        var fetchedAdvisor = await _sut.GetByIdAsync(advisor.Id);
+        Assert.NotNull(fetchedAdvisor);
+        Assert.Empty(fetchedAdvisor!.Scopes);
+        Assert.Null(fetchedAdvisor.Description);
+    }
+
+    [Fact]
+    public async Task CreateMany_is_noop_for_empty_list()
+    {
+        var garage = Factories.Garage();
+        await _garages.CreateAsync(garage);
+
+        await _sut.CreateManyAsync([]);
+
+        Assert.Empty(await _sut.ListByGarageAsync(garage.Id));
+    }
+
+    [Fact]
     public async Task ListByGarage_returns_only_that_garages_roles_ordered_by_created_at()
     {
         var garage = Factories.Garage();

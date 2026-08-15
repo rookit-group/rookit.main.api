@@ -56,7 +56,8 @@ public class GarageEndpointsTests : IAsyncLifetime
             _garageOptions);
 
         _permissionService = new PermissionService(_memberships);
-        _garageService = new GarageService(fixture.DataSource, _garages, _roles, _memberships);
+        var roleService = new RoleService(_roles, _memberships);
+        _garageService = new GarageService(fixture.DataSource, _garages, roleService, _memberships);
     }
 
     public Task InitializeAsync() => _fixture.ResetAsync();
@@ -172,14 +173,14 @@ public class GarageEndpointsTests : IAsyncLifetime
 
         var created = Assert.IsType<Created<GarageListItemDto>>(result);
         Assert.Equal("Downtown Motors", created.Value!.Name);
-        Assert.Equal(GarageService.OwnerRoleName, created.Value.RoleName);
+        Assert.Equal("Owner", created.Value.RoleName);
 
         // The caller can now see the garage in their own list as its owner.
         var list = await GarageEndpoints.ListMyGaragesAsync(PrincipalFor(user.Id), _tokenService, _memberships);
         var ok = Assert.IsType<Ok<List<GarageListItemDto>>>(list);
         var item = Assert.Single(ok.Value!);
         Assert.Equal(created.Value.GarageId, item.GarageId);
-        Assert.Equal(GarageService.OwnerRoleName, item.RoleName);
+        Assert.Equal("Owner", item.RoleName);
     }
 
     // The seeded Owner role holds the wildcard, so opening a session for the just-created garage

@@ -11,28 +11,22 @@ public record GarageCreationResult(GarageEntity Garage, RoleEntity OwnerRole);
 
 public interface IGarageService
 {
-    // Creates a garage, seeds its Owner role, and assigns the given internal profile to that
-    // role - atomically. The profile must already exist.
+    // Creates a garage, seeds its default roles (the system Owner role plus starter Manager and
+    // Mechanic roles), and assigns the given internal profile to the Owner role - atomically. The
+    // profile must already exist.
     Task<GarageCreationResult> CreateAsync(string name, Guid ownerInternalUserProfileId);
 }
 
 public class GarageService(
     NpgsqlDataSource dataSource,
     IGarageRepository garageRepository,
-    IRoleRepository roleRepository,
+    IRoleService roleService,
     IGarageMembershipRepository membershipRepository
 ) : IGarageService
 {
-    // Default name for the auto-seeded owner role. Owners may rename it later; the role's power
-    // comes from its wildcard scope, not from this name - nothing in the system keys off it.
-    public const string OwnerRoleName = "Owner";
-
-    private const string OwnerRoleDescription =
-        "Full access to this garage, including any permissions added in the future.";
-
     private readonly NpgsqlDataSource _dataSource = dataSource;
     private readonly IGarageRepository _garageRepository = garageRepository;
-    private readonly IRoleRepository _roleRepository = roleRepository;
+    private readonly IRoleService _roleService = roleService;
     private readonly IGarageMembershipRepository _membershipRepository = membershipRepository;
 
     public async Task<GarageCreationResult> CreateAsync(string name, Guid ownerInternalUserProfileId)
@@ -55,12 +49,42 @@ public class GarageService(
         {
             Id = Guid.NewGuid(),
             GarageId = garage.Id,
-            Name = OwnerRoleName,
-            Description = OwnerRoleDescription,
+            Name = "Owner",
+            Description = "Full access to this garage, including any permissions added in the future.",
             Scopes = [Scope.Wildcard],
             IsSystem = true,
             CreatedAt = now,
             UpdatedAt = null,
+        };
+
+        var initialRoles = new List<RoleEntity>
+        {
+            ownerRole,
+            // Starter roles seeded so a new garage is immediately usable without the owner having to
+            // hand-build a role set. Unlike Owner these are ordinary (IsSystem = false) data roles the
+            // owner can freely rename, re-scope, or delete.
+            new ()
+            {
+                Id = Guid.NewGuid(),
+                GarageId = garage.Id,
+                Name = "Manager",
+                Description = "Manage members",
+                Scopes = [Scope.GarageRead, Scope.StaffRead],
+                IsSystem = false,
+                CreatedAt = now,
+                UpdatedAt = null,
+            },
+            new ()
+            {
+                Id = Guid.NewGuid(),
+                GarageId = garage.Id,
+                Name = "Mechanic",
+                Description = "View and update vehicles",
+                Scopes = [Scope.GarageRead],
+                IsSystem = false,
+                CreatedAt = now,
+                UpdatedAt = null,
+            },
         };
 
         var ownerMembership = new GarageMembershipEntity
@@ -79,7 +103,7 @@ public class GarageService(
         await using var transaction = await connection.BeginTransactionAsync();
 
         await _garageRepository.CreateAsync(garage, connection);
-        await _roleRepository.CreateAsync(ownerRole, connection);
+        await _roleService.CreateManyAsync(initialRoles, connection);
         await _membershipRepository.AddAsync(ownerMembership, connection);
 
         await transaction.CommitAsync();
