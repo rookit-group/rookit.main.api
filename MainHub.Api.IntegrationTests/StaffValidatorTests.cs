@@ -8,7 +8,7 @@ namespace MainHub.Api.IntegrationTests;
 public class StaffValidatorTests
 {
     private readonly InviteStaffDtoValidator _invite = new();
-    private readonly AssignRoleDtoValidator _assign = new();
+    private readonly UpdateStaffMemberDtoValidator _update = new();
 
     [Fact]
     public void Invite_passes_when_both_ids_are_present()
@@ -36,16 +36,24 @@ public class StaffValidatorTests
     }
 
     [Fact]
-    public void Assign_passes_when_role_id_is_present()
+    public void Update_passes_when_role_id_is_present()
     {
-        Assert.True(_assign.Validate(new AssignRoleDto { RoleId = Guid.NewGuid() }).IsValid);
+        Assert.True(_update.Validate(new UpdateStaffMemberDto { RoleId = Guid.NewGuid() }).IsValid);
     }
 
     [Fact]
-    public void Assign_rejects_an_empty_role_id()
+    public void Update_rejects_an_empty_role_id()
     {
-        var result = _assign.Validate(new AssignRoleDto { RoleId = Guid.Empty });
+        var result = _update.Validate(new UpdateStaffMemberDto { RoleId = Guid.Empty });
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.PropertyName == nameof(AssignRoleDto.RoleId));
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(UpdateStaffMemberDto.RoleId));
+    }
+
+    [Fact]
+    public void Update_rejects_a_malformed_email()
+    {
+        var result = _update.Validate(new UpdateStaffMemberDto { RoleId = Guid.NewGuid(), Email = "not-an-email" });
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(UpdateStaffMemberDto.Email));
     }
 }

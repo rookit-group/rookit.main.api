@@ -27,7 +27,7 @@ public interface IGarageMembershipRepository
     Task<IReadOnlyList<UserGarageListItem>> ListUserGaragesAsync(Guid userId);
     Task<IReadOnlyList<GarageStaffListItem>> ListGarageMembersAsync(Guid garageId);
     Task<GarageStaffListItem?> GetGarageMemberAsync(Guid garageId, Guid userId);
-    Task<bool> UpdateRoleAsync(Guid internalUserProfileId, Guid garageId, Guid roleId, DateTime updatedAt);
+    Task<bool> UpdateRoleAsync(Guid internalUserProfileId, Guid garageId, Guid roleId, DateTime updatedAt, NpgsqlConnection? connection = null);
     Task<bool> RemoveAsync(Guid internalUserProfileId, Guid garageId);
 }
 
@@ -140,14 +140,14 @@ public class GarageMembershipRepository : IGarageMembershipRepository
 
     // Reassigns a member to a different role. Returns false when the member does not exist. The
     // composite FK still guarantees the new role belongs to the same garage.
-    public async Task<bool> UpdateRoleAsync(Guid internalUserProfileId, Guid garageId, Guid roleId, DateTime updatedAt)
+    public async Task<bool> UpdateRoleAsync(Guid internalUserProfileId, Guid garageId, Guid roleId, DateTime updatedAt, NpgsqlConnection? connection = null)
     {
         const string sql = @"
             UPDATE internal_user_profiles_garages
             SET role_id = @role_id, updated_at = @updated_at
             WHERE internal_user_profile_id = @pid AND garage_id = @garage_id";
 
-        await using var cmd = _dataSource.CreateCommand(sql);
+        await using var cmd = CreateCommand(sql, connection);
         cmd.Parameters.AddWithValue("pid", internalUserProfileId);
         cmd.Parameters.AddWithValue("garage_id", garageId);
         cmd.Parameters.AddWithValue("role_id", roleId);

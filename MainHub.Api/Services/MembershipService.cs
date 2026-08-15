@@ -1,6 +1,7 @@
 using MainHub.Api.Authorization;
 using MainHub.Api.Models;
 using MainHub.Api.Repositories;
+using Npgsql;
 
 namespace MainHub.Api.Services;
 
@@ -12,9 +13,10 @@ public interface IMembershipService
     Task<GarageMembershipEntity> InviteAsync(
         Guid garageId, Guid userId, Guid roleId, IEnumerable<string> actorScopes);
 
-    // Changes an existing member's role.
-    Task<GarageMembershipEntity> AssignRoleAsync(
-        Guid garageId, Guid userId, Guid newRoleId, IEnumerable<string> actorScopes);
+    // Updates an existing member's profile (name/email) and role in one atomic operation. Name and
+    // email are optional (null leaves them unchanged); the role is always (re)assigned.
+    Task<GarageMembershipEntity> UpdateMemberAsync(
+        Guid garageId, Guid userId, string? name, string? email, Guid newRoleId, IEnumerable<string> actorScopes);
 
     // Removes a member from a garage.
     Task RemoveAsync(Guid garageId, Guid userId);
@@ -29,12 +31,16 @@ public interface IMembershipService
 // The invitee is identified by userId and must already have an internal_user_profile (created the
 // first time they sign in) - you cannot invite someone who has never used the app.
 public class MembershipService(
+    NpgsqlDataSource dataSource,
     IInternalUserProfileRepository internalUserProfileRepository,
+    IUserRepository userRepository,
     IRoleRepository roleRepository,
     IGarageMembershipRepository membershipRepository
 ) : IMembershipService
 {
+    private readonly NpgsqlDataSource _dataSource = dataSource;
     private readonly IInternalUserProfileRepository _internalUserProfileRepository = internalUserProfileRepository;
+    private readonly IUserRepository _userRepository = userRepository;
     private readonly IRoleRepository _roleRepository = roleRepository;
     private readonly IGarageMembershipRepository _membershipRepository = membershipRepository;
 
@@ -68,8 +74,8 @@ public class MembershipService(
         return membership;
     }
 
-    public async Task<GarageMembershipEntity> AssignRoleAsync(
-        Guid garageId, Guid userId, Guid newRoleId, IEnumerable<string> actorScopes)
+    public async Task<GarageMembershipEntity> UpdateMemberAsync(
+        Guid garageId, Guid userId, string? name, string? email, Guid newRoleId, IEnumerable<string> actorScopes)
     {
         var (profileId, membership) = await GetMemberAsync(garageId, userId);
         var newRole = await GetGarageRoleAsync(newRoleId, garageId);
@@ -88,9 +94,23 @@ public class MembershipService(
             await EnsureNotLastStaffManagerAsync(garageId);
         }
 
-        await _membershipRepository.UpdateRoleAsync(profileId, garageId, newRoleId, DateTime.UtcNow);
+        var now = DateTime.UtcNow;
+
+        // The role lives on the membership row while name/email live on the shared user row - two
+        // tables. One transaction keeps them consistent: either both writes land or neither does.
+        await using var connection = await _dataSource.OpenConnectionAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        await _membershipRepository.UpdateRoleAsync(profileId, garageId, newRoleId, now, connection);
+        if (name is not null || email is not null)
+        {
+            await _userRepository.UpdateProfileAsync(userId, name, email, now, connection);
+        }
+
+        await transaction.CommitAsync();
+
         membership.RoleId = newRoleId;
-        membership.UpdatedAt = DateTime.UtcNow;
+        membership.UpdatedAt = now;
         return membership;
     }
 

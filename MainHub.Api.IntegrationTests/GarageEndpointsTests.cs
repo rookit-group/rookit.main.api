@@ -201,4 +201,31 @@ public class GarageEndpointsTests : IAsyncLifetime
         var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(ok.Value);
         Assert.Equal(Scope.Wildcard, jwt.Claims.Single(c => c.Type == "scope").Value);
     }
+
+    // ----- Update garage -----
+
+    [Fact]
+    public async Task UpdateGarage_renames_the_garage_and_returns_ok()
+    {
+        var garage = Factories.Garage(name: "Old Name");
+        await _garages.CreateAsync(garage);
+        var dto = new UpdateGarageDto { Name = "New Name" };
+
+        var result = await GarageEndpoints.UpdateGarageAsync(garage.Id, dto, _garageService);
+
+        var ok = Assert.IsType<Ok<GarageDto>>(result);
+        Assert.Equal(garage.Id, ok.Value!.Id);
+        Assert.Equal("New Name", ok.Value.Name);
+        Assert.Equal("New Name", (await _garages.GetByIdAsync(garage.Id))!.Name);
+    }
+
+    [Fact]
+    public async Task UpdateGarage_returns_not_found_when_the_garage_does_not_exist()
+    {
+        var dto = new UpdateGarageDto { Name = "Nope" };
+
+        var result = await GarageEndpoints.UpdateGarageAsync(Guid.NewGuid(), dto, _garageService);
+
+        Assert.IsType<NotFound>(result);
+    }
 }

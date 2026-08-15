@@ -41,10 +41,10 @@ public static class StaffEndpoints
             .Produces(StatusCodes.Status409Conflict);
 
         staff
-            .MapPut("/{userId}", AssignRoleAsync)
-            .AddEndpointFilter<ValidationFilter<AssignRoleDto>>()
+            .MapPut("/{userId}", UpdateStaffMemberAsync)
+            .AddEndpointFilter<ValidationFilter<UpdateStaffMemberDto>>()
             .RequireScope(Scope.StaffManage)
-            .WithSummary("Change a member's role")
+            .WithSummary("Update a member's profile and role")
             .Produces<StaffMemberDto>(StatusCodes.Status200OK)
             .ProducesValidationProblem()
             .Produces(StatusCodes.Status403Forbidden)
@@ -101,10 +101,10 @@ public static class StaffEndpoints
         }
     }
 
-    internal static async Task<IResult> AssignRoleAsync(
+    internal static async Task<IResult> UpdateStaffMemberAsync(
         [FromRoute] Guid garageId,
         [FromRoute] Guid userId,
-        AssignRoleDto dto,
+        UpdateStaffMemberDto dto,
         ClaimsPrincipal user,
         ITokenService tokenService,
         IMembershipService membershipService,
@@ -113,8 +113,10 @@ public static class StaffEndpoints
         var actorScopes = tokenService.GetScopesFromClaims(user);
         try
         {
-            await membershipService.AssignRoleAsync(garageId, userId, dto.RoleId, actorScopes);
+            await membershipService.UpdateMemberAsync(
+                garageId, userId, dto.Name, dto.Email, dto.RoleId, actorScopes);
 
+            // Re-read so the response reflects committed state (updated identity + resolved role name).
             var member = await membershipRepository.GetGarageMemberAsync(garageId, userId);
             return Results.Ok(ToDto(member!));
         }

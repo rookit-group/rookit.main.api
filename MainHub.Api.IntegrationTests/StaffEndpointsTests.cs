@@ -46,7 +46,7 @@ public class StaffEndpointsTests : IAsyncLifetime
             Options.Create(new InternalIdentityJwtSettings { SecretKey = SecretKey, Issuer = "i", Audience = "i" }),
             Options.Create(new GarageJwtSettings { SecretKey = SecretKey, Issuer = "g", Audience = "g" }));
 
-        _membershipService = new MembershipService(_profiles, _roles, _memberships);
+        _membershipService = new MembershipService(fixture.DataSource, _profiles, _users, _roles, _memberships);
     }
 
     public Task InitializeAsync() => _fixture.ResetAsync();
@@ -176,18 +176,18 @@ public class StaffEndpointsTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status403Forbidden, problem.StatusCode);
     }
 
-    // ----- Assign role -----
+    // ----- Update member -----
 
     [Fact]
-    public async Task Assign_changes_the_members_role_and_returns_ok()
+    public async Task Update_changes_the_members_role_and_returns_ok()
     {
         var garageId = await SeedGarageAsync();
         var mechanicId = await SeedRoleAsync(garageId, "Mechanic", Scope.StaffRead);
         var seniorId = await SeedRoleAsync(garageId, "Senior", Scope.GarageRead);
         var userId = await SeedMemberAsync(garageId, mechanicId, "Mover");
-        var dto = new AssignRoleDto { RoleId = seniorId };
+        var dto = new UpdateStaffMemberDto { RoleId = seniorId };
 
-        var result = await StaffEndpoints.AssignRoleAsync(
+        var result = await StaffEndpoints.UpdateStaffMemberAsync(
             garageId, userId, dto, Owner, _tokenService, _membershipService, _memberships);
 
         var ok = Assert.IsType<Ok<StaffMemberDto>>(result);
@@ -196,13 +196,29 @@ public class StaffEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Assign_returns_404_when_the_user_is_not_a_member()
+    public async Task Update_changes_the_members_name_and_email_and_returns_ok()
     {
         var garageId = await SeedGarageAsync();
         var roleId = await SeedRoleAsync(garageId, "Mechanic", Scope.StaffRead);
-        var dto = new AssignRoleDto { RoleId = roleId };
+        var userId = await SeedMemberAsync(garageId, roleId, "Before");
+        var dto = new UpdateStaffMemberDto { Name = "After", Email = "after@example.com", RoleId = roleId };
 
-        var result = await StaffEndpoints.AssignRoleAsync(
+        var result = await StaffEndpoints.UpdateStaffMemberAsync(
+            garageId, userId, dto, Owner, _tokenService, _membershipService, _memberships);
+
+        var ok = Assert.IsType<Ok<StaffMemberDto>>(result);
+        Assert.Equal("After", ok.Value!.Name);
+        Assert.Equal("after@example.com", ok.Value.Email);
+    }
+
+    [Fact]
+    public async Task Update_returns_404_when_the_user_is_not_a_member()
+    {
+        var garageId = await SeedGarageAsync();
+        var roleId = await SeedRoleAsync(garageId, "Mechanic", Scope.StaffRead);
+        var dto = new UpdateStaffMemberDto { RoleId = roleId };
+
+        var result = await StaffEndpoints.UpdateStaffMemberAsync(
             garageId, Guid.NewGuid(), dto, Owner, _tokenService, _membershipService, _memberships);
 
         var problem = Assert.IsType<ProblemHttpResult>(result);
@@ -210,16 +226,16 @@ public class StaffEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Assign_is_forbidden_when_the_actor_cannot_grant_the_target_role()
+    public async Task Update_is_forbidden_when_the_actor_cannot_grant_the_target_role()
     {
         var garageId = await SeedGarageAsync();
         var mechanicId = await SeedRoleAsync(garageId, "Mechanic", Scope.StaffRead);
         var ownerRoleId = await SeedRoleAsync(garageId, "Owner", Scope.Wildcard);
         var userId = await SeedMemberAsync(garageId, mechanicId, "Target");
         var actor = PrincipalWithScopes(Scope.StaffManage);
-        var dto = new AssignRoleDto { RoleId = ownerRoleId };
+        var dto = new UpdateStaffMemberDto { RoleId = ownerRoleId };
 
-        var result = await StaffEndpoints.AssignRoleAsync(
+        var result = await StaffEndpoints.UpdateStaffMemberAsync(
             garageId, userId, dto, actor, _tokenService, _membershipService, _memberships);
 
         var problem = Assert.IsType<ProblemHttpResult>(result);
@@ -227,16 +243,16 @@ public class StaffEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Assign_returns_409_when_demoting_the_last_staff_manager()
+    public async Task Update_returns_409_when_demoting_the_last_staff_manager()
     {
         var garageId = await SeedGarageAsync();
         var managerId = await SeedRoleAsync(garageId, "Manager", Scope.StaffManage);
         var readOnlyId = await SeedRoleAsync(garageId, "Viewer", Scope.StaffRead);
         // The garage's only staff-manager; demoting them would lock the garage out.
         var userId = await SeedMemberAsync(garageId, managerId, "OnlyManager");
-        var dto = new AssignRoleDto { RoleId = readOnlyId };
+        var dto = new UpdateStaffMemberDto { RoleId = readOnlyId };
 
-        var result = await StaffEndpoints.AssignRoleAsync(
+        var result = await StaffEndpoints.UpdateStaffMemberAsync(
             garageId, userId, dto, Owner, _tokenService, _membershipService, _memberships);
 
         var problem = Assert.IsType<ProblemHttpResult>(result);

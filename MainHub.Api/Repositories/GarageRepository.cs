@@ -11,6 +11,7 @@ public interface IGarageRepository
 {
     Task CreateAsync(GarageEntity garage, NpgsqlConnection? connection = null);
     Task<GarageEntity?> GetByIdAsync(Guid id);
+    Task<bool> UpdateAsync(Guid id, string name, DateTime updatedAt);
 }
 
 public class GarageRepository : IGarageRepository
@@ -49,6 +50,22 @@ public class GarageRepository : IGarageRepository
         cmd.Parameters.AddWithValue("id", id);
         await using var reader = await cmd.ExecuteReaderAsync();
         return await reader.ReadAsync() ? Map(reader) : null;
+    }
+
+    // Updates a garage's display name. Returns false when no row matched, letting the service
+    // surface a not-found.
+    public async Task<bool> UpdateAsync(Guid id, string name, DateTime updatedAt)
+    {
+        const string sql = @"
+            UPDATE garages
+            SET name = @name, updated_at = @updated_at
+            WHERE id = @id";
+
+        await using var cmd = _dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("id", id);
+        cmd.Parameters.AddWithValue("name", name);
+        cmd.Parameters.AddWithValue("updated_at", updatedAt);
+        return await cmd.ExecuteNonQueryAsync() > 0;
     }
 
     private static GarageEntity Map(NpgsqlDataReader r) => new()

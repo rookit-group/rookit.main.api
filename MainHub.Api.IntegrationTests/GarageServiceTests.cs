@@ -121,6 +121,28 @@ public class GarageServiceTests : IAsyncLifetime
         Assert.Equal(0, await CountAsync("internal_user_profiles_garages"));
     }
 
+    [Fact]
+    public async Task Update_renames_the_garage()
+    {
+        var garage = Factories.Garage(name: "Old");
+        await _garages.CreateAsync(garage);
+
+        var result = await _sut.UpdateAsync(garage.Id, "New Name");
+
+        Assert.Equal("New Name", result.Name);
+        Assert.Equal(garage.Id, result.Id);
+        var fetched = await _garages.GetByIdAsync(garage.Id);
+        Assert.Equal("New Name", fetched!.Name);
+        Assert.NotNull(fetched.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task Update_throws_when_garage_does_not_exist()
+    {
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => _sut.UpdateAsync(Guid.NewGuid(), "Ghost"));
+    }
+
     private async Task<long> CountAsync(string table)
     {
         await using var cmd = _fixture.DataSource.CreateCommand($"SELECT COUNT(*) FROM {table}");

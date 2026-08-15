@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using MainHub.Api.Authorization;
 using MainHub.Api.Config;
 using MainHub.Api.Enums;
 using MainHub.Api.Filters;
@@ -36,6 +37,42 @@ public static class GarageEndpoints
       .WithSummary("Open a garage-scoped session and mint a short-lived garage access token")
       .Produces<string>(StatusCodes.Status200OK)
       .Produces(StatusCodes.Status403Forbidden);
+
+    // Garage-scoped management: runs under a GarageJwt (pinned by RequireScope) whose garage_id
+    // must match the route's {garageId}. Kept in its own group because these routes authenticate
+    // with the garage token + scope, not the identity token the group above uses.
+    var garageScoped = app
+      .MapGroup("/api/garages/{garageId}")
+      .WithTags("Garages");
+
+    garageScoped
+      .MapPut("", UpdateGarageAsync)
+      .AddEndpointFilter<ValidationFilter<UpdateGarageDto>>()
+      .RequireScope(Scope.GarageManage)
+      .WithSummary("Update a garage's details")
+      .Produces<GarageDto>(StatusCodes.Status200OK)
+      .ProducesValidationProblem()
+      .Produces(StatusCodes.Status404NotFound);
+  }
+
+  // Updates a garage's details (currently its name). Gated by garage:manage; the scope handler has
+  // already asserted the token's garage matches {garageId}, so the not-found path is a defensive
+  // guard rather than an expected outcome.
+  internal static async Task<IResult> UpdateGarageAsync(
+    [FromRoute] Guid garageId,
+    UpdateGarageDto dto,
+    IGarageService garageService
+  )
+  {
+    try
+    {
+      var garage = await garageService.UpdateAsync(garageId, dto.Name);
+      return Results.Ok(new GarageDto { Id = garage.Id, Name = garage.Name });
+    }
+    catch (KeyNotFoundException)
+    {
+      return Results.NotFound();
+    }
   }
 
   // Self-serve garage creation: any authenticated internal user (InternalIdentityJwt) may create a

@@ -15,6 +15,9 @@ public interface IGarageService
     // Mechanic roles), and assigns the given internal profile to the Owner role - atomically. The
     // profile must already exist.
     Task<GarageCreationResult> CreateAsync(string name, Guid ownerInternalUserProfileId);
+
+    // Renames a garage. Throws KeyNotFoundException when the garage does not exist.
+    Task<GarageEntity> UpdateAsync(Guid garageId, string name);
 }
 
 public class GarageService(
@@ -109,5 +112,17 @@ public class GarageService(
         await transaction.CommitAsync();
 
         return new GarageCreationResult(garage, ownerRole);
+    }
+
+    public async Task<GarageEntity> UpdateAsync(Guid garageId, string name)
+    {
+        var updated = await _garageRepository.UpdateAsync(garageId, name, DateTime.UtcNow);
+        if (!updated)
+        {
+            throw new KeyNotFoundException($"Garage with ID {garageId} not found.");
+        }
+
+        // Re-read so the caller gets committed state (e.g. the new updated_at).
+        return (await _garageRepository.GetByIdAsync(garageId))!;
     }
 }

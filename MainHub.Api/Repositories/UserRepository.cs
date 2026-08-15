@@ -13,7 +13,7 @@ public interface IUserRepository
     Task<List<UserEntity>> GetAllUsersPagedAsync(int skip, int limit);
     Task<long> CountAllUsersAsync();
     Task DeleteAsync(Guid id);
-    Task<bool> UpdateProfileAsync(Guid id, string? name, string? email, DateTime updatedAt);
+    Task<bool> UpdateProfileAsync(Guid id, string? name, string? email, DateTime updatedAt, NpgsqlConnection? connection = null);
 }
 
 // Mongo equivalent of this whole class: IMongoCollection<UserEntity> plus
@@ -40,6 +40,11 @@ public class UserRepository : IUserRepository
     {
         _dataSource = dataSource;
     }
+
+    // When a connection is supplied the command runs on it (and therefore inside any open
+    // transaction on that connection); otherwise it uses the pooled data source and auto-commits.
+    private NpgsqlCommand CreateCommand(string sql, NpgsqlConnection? connection)
+        => connection is not null ? new NpgsqlCommand(sql, connection) : _dataSource.CreateCommand(sql);
 
     // Mongo equivalent: _collection.InsertOneAsync(user). Here we write the
     // literal INSERT statement and bind each property to a named parameter.
@@ -122,7 +127,7 @@ public class UserRepository : IUserRepository
     // passing null for a field leaves that column untouched.
     // ExecuteNonQueryAsync() returns the number of rows affected, which is
     // how we know whether a matching row existed (Mongo's MatchedCount).
-    public async Task<bool> UpdateProfileAsync(Guid id, string? name, string? email, DateTime updatedAt)
+    public async Task<bool> UpdateProfileAsync(Guid id, string? name, string? email, DateTime updatedAt, NpgsqlConnection? connection = null)
     {
         const string sql = @"
             UPDATE users
@@ -131,7 +136,7 @@ public class UserRepository : IUserRepository
                 updated_at = @updated_at
             WHERE id = @id";
 
-        await using var cmd = _dataSource.CreateCommand(sql);
+        await using var cmd = CreateCommand(sql, connection);
         cmd.Parameters.AddWithValue("id", id);
         cmd.Parameters.AddWithValue("name", NpgsqlReaderExtensions.NullableParam(name));
         cmd.Parameters.AddWithValue("email", NpgsqlReaderExtensions.NullableParam(email));

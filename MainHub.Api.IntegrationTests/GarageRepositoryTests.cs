@@ -55,4 +55,26 @@ public class GarageRepositoryTests : IAsyncLifetime
         var missing = await _sut.GetByIdAsync(Guid.NewGuid());
         Assert.Null(missing);
     }
+
+    [Fact]
+    public async Task Update_changes_name_and_returns_true()
+    {
+        var garage = Factories.Garage(name: "Old Name", updatedAt: null);
+        await _sut.CreateAsync(garage);
+
+        var updatedAt = new DateTime(2026, 7, 8, 9, 10, 11, DateTimeKind.Utc);
+        var updated = await _sut.UpdateAsync(garage.Id, "New Name", updatedAt);
+
+        Assert.True(updated);
+        var fetched = await _sut.GetByIdAsync(garage.Id);
+        Assert.Equal("New Name", fetched!.Name);
+        Assert.Equal(updatedAt, fetched.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task Update_returns_false_when_missing()
+    {
+        var updated = await _sut.UpdateAsync(Guid.NewGuid(), "Nope", DateTime.UtcNow);
+        Assert.False(updated);
+    }
 }

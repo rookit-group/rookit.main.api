@@ -27,7 +27,7 @@ public class MembershipServiceTests : IAsyncLifetime
         _garages = new GarageRepository(fixture.DataSource);
         _roles = new RoleRepository(fixture.DataSource);
         _memberships = new GarageMembershipRepository(fixture.DataSource);
-        _sut = new MembershipService(_profiles, _roles, _memberships);
+        _sut = new MembershipService(fixture.DataSource, _profiles, _users, _roles, _memberships);
     }
 
     public Task InitializeAsync() => _fixture.ResetAsync();
@@ -152,10 +152,10 @@ public class MembershipServiceTests : IAsyncLifetime
             () => _sut.InviteAsync(garageId, userId, foreignRoleId, OwnerScopes));
     }
 
-    // ----- AssignRole -----
+    // ----- UpdateMember -----
 
     [Fact]
-    public async Task AssignRole_changes_the_members_role()
+    public async Task UpdateMember_changes_the_members_role()
     {
         var garageId = await SeedGarageAsync();
         var userId = await SeedUserAsync();
@@ -163,7 +163,7 @@ public class MembershipServiceTests : IAsyncLifetime
         var seniorId = await SeedRoleAsync(garageId, "Senior", Scope.GarageRead, Scope.GarageManage);
         await _sut.InviteAsync(garageId, userId, mechanicId, OwnerScopes);
 
-        var updated = await _sut.AssignRoleAsync(garageId, userId, seniorId, OwnerScopes);
+        var updated = await _sut.UpdateMemberAsync(garageId, userId, null, null, seniorId, OwnerScopes);
 
         Assert.Equal(seniorId, updated.RoleId);
         var profileId = await _profiles.GetIdByUserIdAsync(userId);
@@ -171,8 +171,43 @@ public class MembershipServiceTests : IAsyncLifetime
         Assert.Equal(seniorId, fetched!.RoleId);
     }
 
+    // The combined update also writes the member's identity (name/email) on the shared user row.
     [Fact]
-    public async Task AssignRole_enforces_escalation_guard()
+    public async Task UpdateMember_updates_the_users_name_and_email()
+    {
+        var garageId = await SeedGarageAsync();
+        var userId = await SeedUserAsync();
+        var roleId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
+        await _sut.InviteAsync(garageId, userId, roleId, OwnerScopes);
+
+        await _sut.UpdateMemberAsync(garageId, userId, "Renamed", "new@example.com", roleId, OwnerScopes);
+
+        var user = await _users.GetByIdAsync(userId);
+        Assert.NotNull(user);
+        Assert.Equal("Renamed", user!.Name);
+        Assert.Equal("new@example.com", user.Email);
+    }
+
+    // Null name/email leave the stored identity untouched (a pure role change).
+    [Fact]
+    public async Task UpdateMember_leaves_profile_unchanged_when_name_and_email_are_null()
+    {
+        var garageId = await SeedGarageAsync();
+        var user = Factories.User(name: "Original");
+        await _users.CreateAsync(user);
+        await _profiles.CreateAsync(Factories.InternalUserProfile(user.Id));
+        var mechanicId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
+        var seniorId = await SeedRoleAsync(garageId, "Senior", Scope.GarageRead, Scope.GarageManage);
+        await _sut.InviteAsync(garageId, user.Id, mechanicId, OwnerScopes);
+
+        await _sut.UpdateMemberAsync(garageId, user.Id, null, null, seniorId, OwnerScopes);
+
+        var fetched = await _users.GetByIdAsync(user.Id);
+        Assert.Equal("Original", fetched!.Name);
+    }
+
+    [Fact]
+    public async Task UpdateMember_enforces_escalation_guard()
     {
         var garageId = await SeedGarageAsync();
         var userId = await SeedUserAsync();
@@ -182,23 +217,23 @@ public class MembershipServiceTests : IAsyncLifetime
         string[] actorScopes = [Scope.GarageRead]; // cannot grant staff:manage
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => _sut.AssignRoleAsync(garageId, userId, managerId, actorScopes));
+            () => _sut.UpdateMemberAsync(garageId, userId, null, null, managerId, actorScopes));
     }
 
     [Fact]
-    public async Task AssignRole_throws_when_user_not_a_member()
+    public async Task UpdateMember_throws_when_user_not_a_member()
     {
         var garageId = await SeedGarageAsync();
         var userId = await SeedUserAsync();
         var roleId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
 
         await Assert.ThrowsAsync<KeyNotFoundException>(
-            () => _sut.AssignRoleAsync(garageId, userId, roleId, OwnerScopes));
+            () => _sut.UpdateMemberAsync(garageId, userId, null, null, roleId, OwnerScopes));
     }
 
     // Demotion lockout: the final staff-manager cannot be demoted to a role without staff:manage.
     [Fact]
-    public async Task AssignRole_blocks_demoting_the_last_staff_manager()
+    public async Task UpdateMember_blocks_demoting_the_last_staff_manager()
     {
         var garageId = await SeedGarageAsync();
         var ownerUserId = await SeedUserAsync();
@@ -207,12 +242,12 @@ public class MembershipServiceTests : IAsyncLifetime
         await _sut.InviteAsync(garageId, ownerUserId, ownerRoleId, OwnerScopes);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => _sut.AssignRoleAsync(garageId, ownerUserId, mechanicId, OwnerScopes));
+            () => _sut.UpdateMemberAsync(garageId, ownerUserId, null, null, mechanicId, OwnerScopes));
     }
 
     // Demotion is allowed while another staff-manager remains.
     [Fact]
-    public async Task AssignRole_allows_demotion_when_another_staff_manager_exists()
+    public async Task UpdateMember_allows_demotion_when_another_staff_manager_exists()
     {
         var garageId = await SeedGarageAsync();
         var ownerUserId = await SeedUserAsync();
@@ -224,7 +259,7 @@ public class MembershipServiceTests : IAsyncLifetime
         await _sut.InviteAsync(garageId, secondUserId, managerId, OwnerScopes);
 
         // The second manager can be demoted because the owner still manages staff.
-        var updated = await _sut.AssignRoleAsync(garageId, secondUserId, mechanicId, OwnerScopes);
+        var updated = await _sut.UpdateMemberAsync(garageId, secondUserId, null, null, mechanicId, OwnerScopes);
 
         Assert.Equal(mechanicId, updated.RoleId);
     }
