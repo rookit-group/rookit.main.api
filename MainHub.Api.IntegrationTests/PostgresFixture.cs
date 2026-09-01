@@ -66,6 +66,7 @@ public sealed class PostgresFixture : IAsyncLifetime
                 service_history_records,
                 service_histories,
                 vehicles,
+                invitations,
                 garages,
                 users
             RESTART IDENTITY CASCADE";

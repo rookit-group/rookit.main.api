@@ -7,12 +7,6 @@ namespace MainHub.Api.Services;
 
 public interface IMembershipService
 {
-    // Adds an already-registered user to a garage with a role. The user must already have signed in
-    // (so their internal staff profile exists); inviting an unknown user fails. Fails if they are
-    // already a member.
-    Task<GarageMembershipEntity> InviteAsync(
-        Guid garageId, Guid userId, Guid roleId, IEnumerable<string> actorScopes);
-
     // Updates an existing member's profile (name/email) and role in one atomic operation. Name and
     // email are optional (null leaves them unchanged); the role is always (re)assigned.
     Task<GarageMembershipEntity> UpdateMemberAsync(
@@ -22,14 +16,13 @@ public interface IMembershipService
     Task RemoveAsync(Guid garageId, Guid userId);
 }
 
-// Owner-facing staff management for a garage. The unbypassable domain rules live here:
+// Owner-facing staff management for a garage. New members join through the phone-number invitation
+// flow (see InvitationService); this service covers the changes made to an EXISTING membership. The
+// unbypassable domain rules live here:
 //   * Escalation guard  - you can only assign a role whose scopes you yourself hold, so only an
 //                         owner (wildcard) can assign the Owner role.
-//   * Duplicate guard    - a user can't be invited to a garage they already belong to.
 //   * Last-admin guard   - the garage must always keep at least one member who can manage staff
 //                          (Scope.StaffManage, wildcard counts), so it can never lock itself out.
-// The invitee is identified by userId and must already have an internal_user_profile (created the
-// first time they sign in) - you cannot invite someone who has never used the app.
 public class MembershipService(
     NpgsqlDataSource dataSource,
     IInternalUserProfileRepository internalUserProfileRepository,
@@ -43,36 +36,6 @@ public class MembershipService(
     private readonly IUserRepository _userRepository = userRepository;
     private readonly IRoleRepository _roleRepository = roleRepository;
     private readonly IGarageMembershipRepository _membershipRepository = membershipRepository;
-
-    public async Task<GarageMembershipEntity> InviteAsync(
-        Guid garageId, Guid userId, Guid roleId, IEnumerable<string> actorScopes)
-    {
-        var role = await GetGarageRoleAsync(roleId, garageId);
-        PermissionGuard.EnsureCanGrant(actorScopes, role.Scopes);
-
-        // The invitee must already exist as an internal staff user (profile created at their first
-        // login). We never create the profile here - inviting an unknown user is an error.
-        var profileId = await _internalUserProfileRepository.GetIdByUserIdAsync(userId)
-            ?? throw new KeyNotFoundException("No such user. The user must sign in at least once before they can be invited.");
-
-        if (await _membershipRepository.GetAsync(profileId, garageId) is not null)
-        {
-            throw new InvalidOperationException("This user is already a member of the garage.");
-        }
-
-        var now = DateTime.UtcNow;
-        var membership = new GarageMembershipEntity
-        {
-            InternalUserProfileId = profileId,
-            GarageId = garageId,
-            RoleId = roleId,
-            CreatedAt = now,
-            UpdatedAt = null,
-        };
-
-        await _membershipRepository.AddAsync(membership);
-        return membership;
-    }
 
     public async Task<GarageMembershipEntity> UpdateMemberAsync(
         Guid garageId, Guid userId, string? name, string? email, Guid newRoleId, IEnumerable<string> actorScopes)

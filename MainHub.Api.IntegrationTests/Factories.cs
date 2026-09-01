@@ -197,4 +197,20 @@ internal static class Factories
             CreatedAt = createdAt ?? BaseUtc,
             UpdatedAt = updatedAt,
         };
+
+    public static InvitationEntity Invitation(
+        Guid garageId,
+        Guid roleId,
+        Guid? id = null,
+        string phone = "+1234567890",
+        DateTime? createdAt = null,
+        DateTime? updatedAt = null) => new()
+        {
+            Id = id ?? Guid.NewGuid(),
+            GarageId = garageId,
+            RoleId = roleId,
+            Phone = phone,
+            CreatedAt = createdAt ?? BaseUtc,
+            UpdatedAt = updatedAt,
+        };
 }

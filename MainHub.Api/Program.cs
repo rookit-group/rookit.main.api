@@ -119,6 +119,7 @@ builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IGarageMembershipRepository, GarageMembershipRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IGarageRepository, GarageRepository>();
+builder.Services.AddScoped<IInvitationRepository, InvitationRepository>();
 
 // 🟦 Register application repositories
 builder.Services.AddScoped<IUserService, UserService>();
@@ -130,6 +131,7 @@ builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
 builder.Services.AddScoped<IMembershipService, MembershipService>();
 builder.Services.AddScoped<IGarageService, GarageService>();
+builder.Services.AddScoped<IInvitationService, InvitationService>();
 builder.Services.AddSingleton<IMinioService, MinioService>();
 
 builder.Services.AddSingleton<IAuthorizationHandler, AllowedTelegramAdminAuthorizationHandler>();
@@ -345,6 +347,7 @@ app.MapAuthEndpoints();
 app.MapGarageEndpoints();
 app.MapRoleEndpoints();
 app.MapStaffEndpoints();
+app.MapInvitationEndpoints();
 app.MapUserEndpoints();
 app.MapVehicleEndpoints();
 app.MapServiceHistoryEndpoints();

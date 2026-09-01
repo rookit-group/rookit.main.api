@@ -58,7 +58,7 @@ sequenceDiagram
     API-->>U: GarageJwt (~5 min, garage_id + scopes baked in)
 
     Note over U,API: Every garage action
-    U->>API: e.g. POST /api/garages/{id}/staff  (+ GarageJwt)
+    U->>API: e.g. GET /api/garages/{id}/staff  (+ GarageJwt)
     API-->>U: authorized by CLAIMS only — no DB lookup
 ```
 
@@ -104,7 +104,7 @@ flowchart LR
         G1["Escalation guard<br/>can't grant scopes you lack"]
         G2["System-role immutable<br/>(Owner)"]
         G3["Last-staff-manager guard"]
-        G4["Invitee must already exist"]
+        G4["Invitation phone match<br/>accept only your own"]
         G5["Cross-garage role isolation"]
     end
 
@@ -128,10 +128,13 @@ erDiagram
     garages ||--o{ internal_user_profiles_garages : "has members"
     garages ||--o{ roles : "defines"
     roles ||--o{ internal_user_profiles_garages : "assigned to member"
+    garages ||--o{ invitations : "has pending"
+    roles ||--o{ invitations : "invited as"
 
     users {
         uuid id PK
         text name
+        text phone "matched on invite accept"
         text provider_id UK
     }
     internal_user_profiles {
@@ -154,10 +157,19 @@ erDiagram
         uuid garage_id PK,FK
         uuid role_id FK "composite FK (role_id, garage_id)"
     }
+    invitations {
+        uuid id PK
+        uuid garage_id FK
+        text phone "UNIQUE per garage"
+        uuid role_id FK "composite FK (role_id, garage_id)"
+    }
 ```
 
 Key point: a user can belong to **many garages** and hold a **different role in
-each** (the role lives on the membership row, not the user).
+each** (the role lives on the membership row, not the user). New members join via
+a **phone-number invitation**: a staff manager creates a pending `invitations`
+row; the invitee accepts it once signed in (their phone must match), which turns
+it into a membership.
 
 ---
 
@@ -187,5 +199,5 @@ flowchart TD
 | Owner role | system, holds `*`, immutable |
 | Grant limit | escalation guard — can't grant what you don't hold |
 | Garage lockout | last-staff-manager guard blocks it |
-| Invite | user must have logged in at least once |
+| Invite | phone-number invitation; invitee accepts to join (matched on `users.phone`) |
 | Errors | 404 not-found · 403 escalation · 409 conflict |

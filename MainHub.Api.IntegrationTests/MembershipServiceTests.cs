@@ -40,8 +40,8 @@ public class MembershipServiceTests : IAsyncLifetime
         return garage.Id;
     }
 
-    // Creates a user AND their internal profile - i.e. someone who has signed in at least once and is
-    // therefore eligible to be invited to a garage. Returns the user id.
+    // Creates a user AND their internal profile - i.e. someone who has signed in at least once.
+    // Returns the user id.
     private async Task<Guid> SeedUserAsync()
     {
         var user = Factories.User();
@@ -57,99 +57,13 @@ public class MembershipServiceTests : IAsyncLifetime
         return role.Id;
     }
 
-    // ----- Invite -----
-
-    [Fact]
-    public async Task Invite_adds_an_existing_user_as_a_member_with_the_role()
+    // Directly links an existing user to a garage with a role. Memberships are created by the
+    // invitation flow in production (see InvitationServiceTests); here we seed them straight through the
+    // repository so these tests can focus on the role-change and removal behaviour.
+    private async Task SeedMembershipAsync(Guid garageId, Guid userId, Guid roleId)
     {
-        var garageId = await SeedGarageAsync();
-        var userId = await SeedUserAsync();
-        var roleId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
-
-        var membership = await _sut.InviteAsync(garageId, userId, roleId, OwnerScopes);
-
-        // The membership hangs off the user's existing profile...
-        var profileId = await _profiles.GetIdByUserIdAsync(userId);
-        Assert.NotNull(profileId);
-        Assert.Equal(profileId!.Value, membership.InternalUserProfileId);
-        // ...and persisted with the requested role.
-        var fetched = await _memberships.GetAsync(profileId.Value, garageId);
-        Assert.NotNull(fetched);
-        Assert.Equal(roleId, fetched!.RoleId);
-    }
-
-    [Fact]
-    public async Task Invite_throws_when_the_user_has_never_signed_in()
-    {
-        var garageId = await SeedGarageAsync();
-        var roleId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
-
-        // A user row with NO internal profile: someone who exists in principle but has never signed
-        // in, so cannot be invited yet.
-        var user = Factories.User();
-        await _users.CreateAsync(user);
-
-        await Assert.ThrowsAsync<KeyNotFoundException>(
-            () => _sut.InviteAsync(garageId, user.Id, roleId, OwnerScopes));
-    }
-
-    [Fact]
-    public async Task Invite_blocks_a_duplicate_membership()
-    {
-        var garageId = await SeedGarageAsync();
-        var userId = await SeedUserAsync();
-        var roleId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
-        await _sut.InviteAsync(garageId, userId, roleId, OwnerScopes);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => _sut.InviteAsync(garageId, userId, roleId, OwnerScopes));
-    }
-
-    [Fact]
-    public async Task Invite_enforces_escalation_guard()
-    {
-        var garageId = await SeedGarageAsync();
-        var userId = await SeedUserAsync();
-        var roleId = await SeedRoleAsync(garageId, "Manager", Scope.StaffManage);
-        string[] actorScopes = [Scope.StaffRead]; // cannot grant staff:manage
-
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => _sut.InviteAsync(garageId, userId, roleId, actorScopes));
-    }
-
-    // Only a wildcard holder (an owner) can hand out the Owner role.
-    [Fact]
-    public async Task Invite_blocks_assigning_owner_role_unless_actor_holds_wildcard()
-    {
-        var garageId = await SeedGarageAsync();
-        var userId = await SeedUserAsync();
-        var ownerRoleId = await SeedRoleAsync(garageId, "Owner", Scope.Wildcard);
-        var everyConcreteScope = Scope.All.ToArray();
-
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            () => _sut.InviteAsync(garageId, userId, ownerRoleId, everyConcreteScope));
-    }
-
-    [Fact]
-    public async Task Invite_throws_when_role_missing()
-    {
-        var garageId = await SeedGarageAsync();
-        var userId = await SeedUserAsync();
-
-        await Assert.ThrowsAsync<KeyNotFoundException>(
-            () => _sut.InviteAsync(garageId, userId, Guid.NewGuid(), OwnerScopes));
-    }
-
-    [Fact]
-    public async Task Invite_blocks_role_from_a_different_garage()
-    {
-        var garageId = await SeedGarageAsync();
-        var otherGarageId = await SeedGarageAsync();
-        var userId = await SeedUserAsync();
-        var foreignRoleId = await SeedRoleAsync(otherGarageId, "Foreign", Scope.GarageRead);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => _sut.InviteAsync(garageId, userId, foreignRoleId, OwnerScopes));
+        var profileId = (await _profiles.GetIdByUserIdAsync(userId))!.Value;
+        await _memberships.AddAsync(Factories.GarageMembership(profileId, garageId, roleId));
     }
 
     // ----- UpdateMember -----
@@ -161,7 +75,7 @@ public class MembershipServiceTests : IAsyncLifetime
         var userId = await SeedUserAsync();
         var mechanicId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
         var seniorId = await SeedRoleAsync(garageId, "Senior", Scope.GarageRead, Scope.GarageManage);
-        await _sut.InviteAsync(garageId, userId, mechanicId, OwnerScopes);
+        await SeedMembershipAsync(garageId, userId, mechanicId);
 
         var updated = await _sut.UpdateMemberAsync(garageId, userId, null, null, seniorId, OwnerScopes);
 
@@ -178,7 +92,7 @@ public class MembershipServiceTests : IAsyncLifetime
         var garageId = await SeedGarageAsync();
         var userId = await SeedUserAsync();
         var roleId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
-        await _sut.InviteAsync(garageId, userId, roleId, OwnerScopes);
+        await SeedMembershipAsync(garageId, userId, roleId);
 
         await _sut.UpdateMemberAsync(garageId, userId, "Renamed", "new@example.com", roleId, OwnerScopes);
 
@@ -198,7 +112,7 @@ public class MembershipServiceTests : IAsyncLifetime
         await _profiles.CreateAsync(Factories.InternalUserProfile(user.Id));
         var mechanicId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
         var seniorId = await SeedRoleAsync(garageId, "Senior", Scope.GarageRead, Scope.GarageManage);
-        await _sut.InviteAsync(garageId, user.Id, mechanicId, OwnerScopes);
+        await SeedMembershipAsync(garageId, user.Id, mechanicId);
 
         await _sut.UpdateMemberAsync(garageId, user.Id, null, null, seniorId, OwnerScopes);
 
@@ -213,7 +127,7 @@ public class MembershipServiceTests : IAsyncLifetime
         var userId = await SeedUserAsync();
         var mechanicId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
         var managerId = await SeedRoleAsync(garageId, "Manager", Scope.StaffManage);
-        await _sut.InviteAsync(garageId, userId, mechanicId, OwnerScopes);
+        await SeedMembershipAsync(garageId, userId, mechanicId);
         string[] actorScopes = [Scope.GarageRead]; // cannot grant staff:manage
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
@@ -239,7 +153,7 @@ public class MembershipServiceTests : IAsyncLifetime
         var ownerUserId = await SeedUserAsync();
         var ownerRoleId = await SeedRoleAsync(garageId, "Owner", Scope.Wildcard);
         var mechanicId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
-        await _sut.InviteAsync(garageId, ownerUserId, ownerRoleId, OwnerScopes);
+        await SeedMembershipAsync(garageId, ownerUserId, ownerRoleId);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => _sut.UpdateMemberAsync(garageId, ownerUserId, null, null, mechanicId, OwnerScopes));
@@ -255,8 +169,8 @@ public class MembershipServiceTests : IAsyncLifetime
         var ownerRoleId = await SeedRoleAsync(garageId, "Owner", Scope.Wildcard);
         var managerId = await SeedRoleAsync(garageId, "Manager", Scope.StaffManage);
         var mechanicId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
-        await _sut.InviteAsync(garageId, ownerUserId, ownerRoleId, OwnerScopes);
-        await _sut.InviteAsync(garageId, secondUserId, managerId, OwnerScopes);
+        await SeedMembershipAsync(garageId, ownerUserId, ownerRoleId);
+        await SeedMembershipAsync(garageId, secondUserId, managerId);
 
         // The second manager can be demoted because the owner still manages staff.
         var updated = await _sut.UpdateMemberAsync(garageId, secondUserId, null, null, mechanicId, OwnerScopes);
@@ -274,8 +188,8 @@ public class MembershipServiceTests : IAsyncLifetime
         var mechanicUserId = await SeedUserAsync();
         var ownerRoleId = await SeedRoleAsync(garageId, "Owner", Scope.Wildcard);
         var mechanicId = await SeedRoleAsync(garageId, "Mechanic", Scope.GarageRead);
-        await _sut.InviteAsync(garageId, ownerUserId, ownerRoleId, OwnerScopes);
-        await _sut.InviteAsync(garageId, mechanicUserId, mechanicId, OwnerScopes);
+        await SeedMembershipAsync(garageId, ownerUserId, ownerRoleId);
+        await SeedMembershipAsync(garageId, mechanicUserId, mechanicId);
 
         await _sut.RemoveAsync(garageId, mechanicUserId);
 
@@ -289,7 +203,7 @@ public class MembershipServiceTests : IAsyncLifetime
         var garageId = await SeedGarageAsync();
         var ownerUserId = await SeedUserAsync();
         var ownerRoleId = await SeedRoleAsync(garageId, "Owner", Scope.Wildcard);
-        await _sut.InviteAsync(garageId, ownerUserId, ownerRoleId, OwnerScopes);
+        await SeedMembershipAsync(garageId, ownerUserId, ownerRoleId);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => _sut.RemoveAsync(garageId, ownerUserId));

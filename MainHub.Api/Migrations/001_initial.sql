@@ -144,6 +144,45 @@ CREATE INDEX IF NOT EXISTS ix_internal_user_profiles_garages_garage_id ON intern
 CREATE INDEX IF NOT EXISTS ix_internal_user_profiles_garages_role_id ON internal_user_profiles_garages(role_id);
 -- (the composite PK already indexes internal_user_profile_id first, so "find all garages for an internal user profile" is covered)
 
+-- INVITATIONS TABLE: Pending phone-number invitations to join a garage as staff.
+-- Unlike a membership (internal_user_profiles_garages), an invitation can exist BEFORE the invitee
+-- has ever signed in: they are addressed by phone number, not by a user id. A staff manager creates
+-- a pending invitation; the invited person, once signed in, accepts it and becomes a member. The row
+-- only ever represents a PENDING invitation - accepting or revoking it deletes the row, so the table
+-- never accumulates historical/consumed invitations.
+CREATE TABLE IF NOT EXISTS invitations (
+    -- Unique identifier for this invitation (used to accept or revoke it).
+    id          uuid        PRIMARY KEY,
+    -- The garage the person is invited to (FK to garages) - deletes the invitation if the garage is deleted.
+    garage_id   uuid        NOT NULL REFERENCES garages(id) ON DELETE CASCADE,
+    -- The invitee's phone number. This is how a not-yet-registered person is addressed; on accept it
+    -- is matched against the accepting user's users.phone value.
+    phone       text        NOT NULL,
+    -- The role the invitee will hold once they accept. The COMPOSITE FK (role_id, garage_id) ->
+    -- roles(id, garage_id) guarantees the role belongs to the SAME garage as the invitation, mirroring
+    -- the membership table. ON DELETE CASCADE: deleting a role drops any pending invitations for it,
+    -- since an invitation to a removed role is meaningless.
+    role_id     uuid        NOT NULL,
+    -- When this invitation was created.
+    created_at  timestamptz NOT NULL,
+    -- When this invitation was last updated (unused today; kept for table-shape consistency).
+    updated_at  timestamptz NULL,
+    -- A garage can have at most one pending invitation per phone number. Because accept/revoke delete
+    -- the row, this plain UNIQUE constraint fully expresses "no duplicate pending invites".
+    UNIQUE (garage_id, phone),
+    -- Composite FK: the invited role must belong to the SAME garage as the invitation.
+    FOREIGN KEY (role_id, garage_id)
+        REFERENCES roles(id, garage_id)
+        ON DELETE CASCADE
+);
+
+-- INDEX: speeds up "list all invitations for a garage" (staff management screen).
+CREATE INDEX IF NOT EXISTS ix_invitations_garage_id ON invitations(garage_id);
+-- INDEX: speeds up "list the invitations addressed to this phone" (the invitee's inbox).
+CREATE INDEX IF NOT EXISTS ix_invitations_phone ON invitations(phone);
+-- INDEX: speeds up FK cascade lookups when a role is deleted.
+CREATE INDEX IF NOT EXISTS ix_invitations_role_id ON invitations(role_id);
+
 -- VEHICLES TABLE: Stores vehicle/car information
 -- Relationship: MANY vehicles belong to ONE external user profile (MANY-TO-ONE with external_user_profiles table)
 -- Relationship: ONE vehicle has MANY service histories (ONE-TO-MANY)

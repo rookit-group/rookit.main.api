@@ -104,14 +104,35 @@ Violation → `UnauthorizedAccessException` → **403**.
 - **Last-staff-manager guard:** a garage must always keep ≥1 member with
   `staff:manage`. Removing/demoting the last one → **409**
   (`MembershipService.EnsureNotLastStaffManagerAsync`).
-- **Invitee must already exist:** you can only invite a user who has an
-  `internal_user_profiles` row (created at their first login). Inviting an
-  unknown user → **404** with a user-facing message ("No such user. The user
-  must sign in at least once before they can be invited."). We **never**
-  create the invitee's profile on invite.
-- **Duplicate-member guard:** inviting an existing member → **409**.
-- **Cross-garage role isolation:** assigning a role from another garage → **409**
-  (also enforced at the DB level by the composite FK, see below).
+- **Cross-garage role isolation:** assigning/inviting with a role from another
+  garage → **409** (also enforced at the DB level by the composite FK, see below).
+
+### Joining a garage: the phone-number invitation flow
+
+New members join via an **invitation** (`invitations` table), not by a direct
+userId add. An invitation can exist **before** the invitee has ever signed in —
+they are addressed by **phone number**, matched against `users.phone` on accept.
+Logic lives in `InvitationService`; the table only ever holds *pending* rows
+(accept/revoke delete them). The flow has two sides with different tokens:
+
+- **Garage-management side** (`/api/garages/{garageId}/invitations`, `GarageJwt`):
+  - `GET` list pending invitations — `staff:read`.
+  - `POST` invite `{ phone, roleId }` — `staff:manage`. Runs the **escalation
+    guard** (only grant a role whose scopes you hold), asserts the role belongs
+    to the garage, and rejects a **duplicate pending invite** for the same phone
+    (`UNIQUE (garage_id, phone)`) → **409**.
+  - `DELETE /{invitationId}` revoke — `staff:manage`; wrong garage → **404**.
+- **Invitee side** (`/api/invitations`, stage-1 `InternalIdentityJwt` — the user
+  is signed in but not yet a member, so holds no garage token):
+  - `GET` list the invitations addressed to the caller's own `users.phone`.
+  - `POST /{invitationId}/accept` — the invitation's phone must match the
+    caller's phone (mismatch/no phone → **404**, never leaking others' invites);
+    creates the membership with the invited role and **consumes the invitation
+    in the same transaction**. Already a member → **409** (the stale invite is
+    cleared).
+
+The escalation guard runs at **invite** time; **accept** re-checks nothing about
+scopes (the role was already authorized when the invite was created).
 
 ## Endpoint error-mapping convention
 
@@ -134,7 +155,8 @@ Handlers `try/catch` service exceptions and map:
 (chicken-and-egg: there's no garage yet). It `EnsureAsync`-es the caller's *own*
 profile (idempotent) and calls `GarageService.CreateAsync`, which atomically
 creates the garage + a wildcard `Owner` system-role + the owner membership.
-Contrast with invite, which requires the *other* user to already exist.
+Contrast with the invitation flow, where the invitee joins later by accepting a
+phone-number invitation (their membership is created on accept, not up front).
 
 ## Database invariants (defence in depth)
 
@@ -151,6 +173,11 @@ See [001_initial.sql](../../MainHub.Api/Migrations/001_initial.sql):
 - `role_id` is `NOT NULL` → every member always has exactly one role; there is no
   scope-less "zombie" member state, so permission checks never need a "no role"
   branch.
+- `invitations` has `UNIQUE (garage_id, phone)` → at most one pending invitation
+  per phone per garage. Its **composite FK `(role_id, garage_id)` →
+  `roles(id, garage_id)`** keeps the invited role in the same garage; here it is
+  `ON DELETE CASCADE` (deleting a role drops its pending invitations, which are
+  meaningless once the role is gone) — unlike the membership FK's `NO ACTION`.
 
 ## Testing (required)
 
